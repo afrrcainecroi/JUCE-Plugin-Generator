@@ -1,11 +1,12 @@
-# JUCE Plugin Generator
-
-Generatore di plugin JUCE scritto in Guile/Scheme.
 ## License
 
 This project is licensed under the MIT License.
 
 Copyright (c) 2025- Franco Arcieri (afrrcainecroi).
+
+# JUCE Plugin Generator
+
+Generatore di plugin JUCE scritto in Guile/Scheme.
 
 Il progetto descrive tramite una DSL Scheme:
 
