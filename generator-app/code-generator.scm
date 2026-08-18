@@ -379,25 +379,6 @@
 (define-public (generated-resource-filename set-name file)
   (string-append set-name "__" file))
 
-(define-public (binary-data-symbol-name set-name file)
-  (let* ((generated
-          (generated-resource-filename set-name file))
-
-         (chars
-          (string->list generated))
-
-         (mapped
-          (list->string
-           (map
-            (lambda (c)
-              (if (or (char-alphabetic? c)
-                      (char-numeric? c))
-                  c
-                  #\_))
-            chars))))
-
-    mapped))
-
 (define-public (generate-image-resource-cpp-code)
 
   (string-concatenate
@@ -661,7 +642,7 @@
 				   (screenRatio ratio)
 				   (standardScreenWidth width)
 				   (standardScreenHeight "standardScreenWidth / screenRatio"))
-	     (AppendStringTo *GRIDONOFF* (string-append "bool drawDebugGrid = " (if show-grid "true;\n" "false;\n")))
+	     ;; (AppendStringTo *GRIDONOFF* (string-append "bool drawDebugGrid = " (if show-grid "true;\n" "false;\n")))
 	     (set! layout-data-grid `(("rows" . ,rows)("cols" . ,cols)))))
 
 ;; header e footer
@@ -1810,6 +1791,11 @@
      (tick-labels->cpp model))))
 
 (define-public (rotary-kinetic-properties->cpp model)
+  (format #t
+          "ROTARY ~s icon-set=~s morph-icon=~s~%"
+          (assoc-ref model 'id)
+          (assoc-ref model 'icon-set)
+          (assoc-ref model 'morph-icon))
   (let ((var        (assoc-ref model 'var))
         (icon-type  (assoc-ref model 'icon-type))
         (morph-icon (assoc-ref model 'morph-icon))

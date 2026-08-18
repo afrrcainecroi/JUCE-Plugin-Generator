@@ -1667,18 +1667,25 @@ var id var))
         #:processor-reference "cutoff"
 
         #:title "CUTOFF"
-        #:min 20.0
-        #:max 20000.0
-        #:default 1000.0
-        #:scale 'logarithmic
-        #:value-type 'freq
-        #:suffix " Hz"
+        ;; #:min 20.0
+        ;; #:max 20000.0
+        ;; #:default 1000.0
+        ;; #:scale 'logarithmic
+        ;; #:value-type 'freq
+        ;; #:suffix " Hz"
 	
 	#:show-ticks #t
 	#:show-labels #t
 	#:tick-count 5
-	#:tick-mode 'all
-	#:tick-labels '("MIN" "25" "50" "75" "MAX")
+	;; #:tick-mode 'all
+	;; #:tick-labels '("MIN" "25" "50" "75" "MAX")
+
+	#:min 0.0
+	#:max 5.0
+	#:interval 1.0
+	#:icon-set "waveforms"
+	#:morph-icon #t
+
 	
 
         #:row 4
@@ -1792,6 +1799,9 @@ var id var))
         #:show-labels #t
         #:tick-count 5
         #:tick-mode 'all
+
+	#:icon-set "waves"
+	#:morph-icon #t
 
         #:row 16
         #:col 1
