@@ -1,0 +1,1 @@
+GUILE_LOAD_COMPILED_PATH=../:/new_devs/usr/local/mtfa-guile-libs/:/new_devs/usr/local/mtfa-guile-libs/share/guile/site/3.0/:/new_devs/usr/local/mtfa-guile-libs/lib/guile/3.0/ccache/:/new_devs/usr/local/mtfa-guile-libs/lib/guile/3.0/site-ccache/ make -j12

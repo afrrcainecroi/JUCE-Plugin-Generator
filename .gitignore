@@ -1,0 +1,25 @@
+# Tutto escluso per default
+*
+
+# File Git/documentazione
+!.gitignore
+!README.md
+!PROJECT_STATE.md
+!NEXT.md
+
+# Entry point
+!generator.scm
+
+# Generator sources
+!generator-app/
+generator-app/*
+
+!generator-app/code-generator.scm
+!generator-app/genera-classi.scm
+!generator-app/globals.scm
+!generator-app/tools.scm
+!generator-app/Compila.sh
+!generator-app/Makefile
+
+# Eventuale configurazione Emacs realmente utile al progetto
+!.dir-locals.el
