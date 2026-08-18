@@ -155,6 +155,7 @@
     SYNTH_H_RP
     PROCESS
     PAINT_OVER_CHILDREN
+    IMAGE_RESOURCES
     ))
 ;;
 ;; (define-public *INTERFACE* "")
@@ -243,11 +244,12 @@
 (define-public layout-data-components '())
 
 (define-public *components* '())
-
+(define-public *image-sets* '())
 
 
 (define-public (reset-components!)
   (set! *components* '())
+  (set! *image-sets* '())
   #t)
 ;; (define-public (find-component id)
 ;;   (find

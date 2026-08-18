@@ -113,6 +113,10 @@
   (set! layout-data-components '())
   ;;
   (interface-definitions dst-folder new-name)
+
+  ;; Materializza le RESOURCE dichiarate dalla DSL.
+  (materialize-image-sets! dst-folder)
+  (update-jucer-image-resources! (string-append dst-folder "/JX11.jucer"))
   ;;
   ;; ============================================================
   ;; NUOVO MODELLO COMPONENTI
@@ -150,6 +154,9 @@
   
   (AppendStringTo *PAINT_OVER_CHILDREN*
                   (generate-paint-over-children-code))
+
+  (AppendStringTo *IMAGE_RESOURCES*
+                (generate-image-resource-cpp-code))
 
   ;;
   ;;Genera i codici c++ per PluginEditor.cpp
@@ -237,6 +244,7 @@
     (replace-between-flags PluginEditor.cpp *BACKGROUND::START* *BACKGROUND::END* *BACKGROUND*)
     (replace-between-flags PluginEditor.cpp *DESTROY::START* *DESTROY::END* *DESTROY*)
     (replace-between-flags PluginEditor.cpp *PAINT_OVER_CHILDREN::START* *PAINT_OVER_CHILDREN::END* *PAINT_OVER_CHILDREN*)
+    (replace-between-flags PluginEditor.cpp *IMAGE_RESOURCES::START* *IMAGE_RESOURCES::END* *IMAGE_RESOURCES*)
     (replace-between-flags PluginEditor.h *DECLARATIONS::START* *DECLARATIONS::END* *DECLARATIONS*)
     (replace-between-flags PluginEditor.h *FOOTER_MOUSE::START* *FOOTER_MOUSE::END* *FOOTER_MOUSE*)
     (replace-between-flags PluginEditor.h *FOOTER_TIMER::START* *FOOTER_TIMER::END* *FOOTER_TIMER*)
@@ -292,7 +300,8 @@
     (unless aggiornamento
       (replace-between-flags Synth.h *SYNTH_H_RP::START* *SYNTH_H_RP::END* *SYNTH_H_RP*)
       )
-    ))
+    )
+  (ResaveProjucerProject dst-folder))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;; Costruzione dell'interfaccia ;;;;;;;;
@@ -1372,9 +1381,9 @@ var id var))
       ;;Ora gli chiedo di specificare il file di configurazione dell'interfaccia utente
       (GenerateC++ g::gen-var dst-folder new-name interface-definitions #f) ;;non è aggiornamento!!
       ;;
-      ;; Queste tre righe per velocizzare non servono, in produzione devi riattivarle
-      (AskForOkCancel "Info" "Now you can open the project in Projucer to set the target environment (linux/Macos)" "Ok")
-      (RunProjucer)
+      ;; ;; Queste tre righe non servono, è GenerateC++ che chiama la CLI di projucer e genera i makefile
+      ;; (AskForOkCancel "Info" "Now you can open the project in Projucer to set the target environment (linux/Macos)" "Ok")
+      ;; (RunProjucer)
       (display "Programma generato correttamente\n")
       (return #t))
      ;;
@@ -1558,9 +1567,9 @@ var id var))
   ;; SCREEN
   ;; ------------------------------------------------------------
   (make <screen>
-        #:width 1000
-        #:show-grid #t)
-
+    #:width 1000
+    #:rows 24
+    #:show-grid #t)
   ;; ------------------------------------------------------------
   ;; GLOBAL UI
   ;; ------------------------------------------------------------
@@ -1572,26 +1581,46 @@ var id var))
   (make <header-footer>
         #:id "Main Header Footer")
 
-  ;; ============================================================
-  ;; INPUT METER
-  ;; ============================================================
-  (make <meter>
-        #:id "Meter In"
-        #:role 'input-meter
 
-        #:style 'segmented
-        #:scale-type 'db
-        #:range-min -60.0
-        #:range-max 6.0
-        #:num-segments 24
+  (make <image-set>
+      #:name "waveforms"
+      #:source-directory "/volume1/sources/NEW_DEVS/DEPLOYED/MUSIC/images/"
+      #:files '("1.png"
+                "2.png"
+                "3.png"
+                "4.png"
+		"5.png"
+		"6.png"))
 
-        #:row 4
-        #:col 1
-        #:row-span 8
-        #:col-span 3
+(make <image-set>
+      #:name "waves"
+      #:source-directory "/volume1/sources/NEW_DEVS/DEPLOYED/MUSIC/images/"
+      #:files '("wave_sine.png"
+                "wave_square.png"
+                "wave_ramp.png"
+                "wave_iramp.png"
+                "wave_triangle.png"))
 
-        #:margin-tb 8
-        #:margin-lr 6)
+;; ============================================================
+;; INPUT METER
+;; ============================================================
+(make <meter>
+  #:id "Meter In"
+  #:role 'input-meter
+
+  #:style 'segmented
+  #:scale-type 'db
+  #:range-min -60.0
+  #:range-max 6.0
+  #:num-segments 24
+
+  #:row 4
+  #:col 1
+  #:row-span 8
+  #:col-span 3
+
+  #:margin-tb 8
+  #:margin-lr 6)
 
   ;; ============================================================
   ;; INPUT GAIN
@@ -1614,6 +1643,10 @@ var id var))
         #:value-type 'gain
         #:suffix " dB"
         #:orientation 'vertical
+
+	#:show-ticks #t
+	#:show-labels #t
+	#:show-value #f
 
         #:row 4
         #:col 4
@@ -1640,8 +1673,13 @@ var id var))
         #:scale 'logarithmic
         #:value-type 'freq
         #:suffix " Hz"
-        #:show-ticks #t
-        #:show-labels #t
+	
+	#:show-ticks #t
+	#:show-labels #t
+	#:tick-count 5
+	#:tick-mode 'all
+	#:tick-labels '("MIN" "25" "50" "75" "MAX")
+	
 
         #:row 4
         #:col 7
@@ -1691,6 +1729,10 @@ var id var))
         #:suffix " dB"
         #:orientation 'vertical
 
+	;; #:show-ticks #t
+	;; #:show-labels #f
+
+
         #:row 4
         #:col 18
         #:row-span 6
@@ -1720,6 +1762,219 @@ var id var))
         #:margin-tb 8
         #:margin-lr 6)
 
+
+    ;; ============================================================
+  ;; PROPERTY TEST BENCH
+  ;; ============================================================
+
+  ;; ------------------------------------------------------------
+  ;; TEST 1 - GAIN FORMAT
+  ;; value-type, suffix, show-value, show-ticks, show-labels
+  ;; ------------------------------------------------------------
+  (make <rotary-slider>
+        #:id "Test Gain Rotary"
+
+        #:parameter-id "testGainRotary"
+        #:parameter-name "Test Gain Rotary"
+        #:processor-reference "testGainRotary"
+
+        #:title "GAIN"
+        #:min -60.0
+        #:max 12.0
+        #:default 0.0
+        #:interval 0.1
+        #:scale 'linear
+        #:value-type 'gain
+        #:suffix " dB"
+
+        #:show-value #t
+        #:show-ticks #t
+        #:show-labels #t
+        #:tick-count 5
+        #:tick-mode 'all
+
+        #:row 16
+        #:col 1
+        #:row-span 4
+        #:col-span 8
+
+        #:margin-tb 6
+        #:margin-lr 8)
+
+  ;; ------------------------------------------------------------
+  ;; TEST 2 - FREQUENCY / LOG / ENDPOINTS
+  ;; value-type=freq, scale=logarithmic, tick-mode=endpoints
+  ;; ------------------------------------------------------------
+  (make <rotary-slider>
+        #:id "Test Frequency Rotary"
+
+        #:parameter-id "testFreqRotary"
+        #:parameter-name "Test Frequency Rotary"
+        #:processor-reference "testFreqRotary"
+
+        #:title "FREQ"
+        #:min 20.0
+        #:max 20000.0
+        #:default 1000.0
+        #:interval 0.0
+        #:scale 'logarithmic
+        #:value-type 'freq
+        #:suffix " Hz"
+
+        #:show-value #t
+        #:show-ticks #t
+        #:show-labels #t
+        #:tick-count 5
+        #:tick-mode 'endpoints
+
+        #:row 16
+        #:col 9
+        #:row-span 4
+        #:col-span 8
+
+        #:margin-tb 6
+        #:margin-lr 8)
+
+  ;; ------------------------------------------------------------
+  ;; TEST 3 - ICON TYPE / NO VALUE
+  ;; icon-type, show-value=#f
+  ;; ------------------------------------------------------------
+  (make <rotary-slider>
+        #:id "Test Icon Rotary"
+
+        #:parameter-id "testIconRotary"
+        #:parameter-name "Test Icon Rotary"
+        #:processor-reference "testIconRotary"
+
+        #:title "ICON"
+        #:min 0.0
+        #:max 1.0
+        #:default 0.5
+        #:interval 0.0
+        #:scale 'linear
+        #:value-type 'default
+        #:suffix ""
+
+        #:show-value #f
+        #:show-ticks #f
+        #:show-labels #f
+
+        #:icon-type 0
+
+        #:row 16
+        #:col 17
+        #:row-span 4
+        #:col-span 8
+
+        #:margin-tb 6
+        #:margin-lr 8)
+
+  ;; ------------------------------------------------------------
+  ;; TEST 4 - TICK MODE NONE
+  ;; i tick restano, le label devono sparire
+  ;; ------------------------------------------------------------
+  (make <rotary-slider>
+        #:id "Test TickMode None"
+
+        #:parameter-id "testTickModeNone"
+        #:parameter-name "Test TickMode None"
+        #:processor-reference "testTickModeNone"
+
+        #:title "NO LABELS"
+        #:min 0.0
+        #:max 100.0
+        #:default 50.0
+        #:interval 1.0
+        #:scale 'linear
+        #:value-type 'default
+        #:suffix ""
+
+        #:show-value #t
+        #:show-ticks #t
+        #:show-labels #t
+        #:tick-count 5
+        #:tick-mode 'none
+
+        #:row 20
+        #:col 1
+        #:row-span 4
+        #:col-span 8
+
+        #:margin-tb 6
+        #:margin-lr 8)
+
+  ;; ------------------------------------------------------------
+  ;; TEST 5 - CUSTOM TICK LABELS
+  ;; tick-labels custom
+  ;; ------------------------------------------------------------
+  (make <rotary-slider>
+        #:id "Test Custom Labels"
+
+        #:parameter-id "testCustomLabels"
+        #:parameter-name "Test Custom Labels"
+        #:processor-reference "testCustomLabels"
+
+        #:title "CUSTOM"
+        #:min 0.0
+        #:max 4.0
+        #:default 2.0
+        #:interval 1.0
+        #:scale 'linear
+        #:value-type 'default
+        #:suffix ""
+
+        #:show-value #t
+        #:show-ticks #t
+        #:show-labels #t
+        #:tick-count 5
+        #:tick-mode 'all
+        #:tick-labels '("MIN" "25" "50" "75" "MAX")
+
+        #:row 20
+        #:col 9
+        #:row-span 4
+        #:col-span 8
+
+        #:margin-tb 6
+        #:margin-lr 8)
+
+  ;; ------------------------------------------------------------
+  ;; TEST 6 - MORPH ICON
+  ;; morph-icon + tick-labels discreti
+  ;; ------------------------------------------------------------
+  (make <rotary-slider>
+        #:id "Test Morph Icon"
+
+        #:parameter-id "testMorphIcon"
+        #:parameter-name "Test Morph Icon"
+        #:processor-reference "testMorphIcon"
+
+        #:title "MORPH"
+        #:min 0.0
+        #:max 3.0
+        #:default 0.0
+        #:interval 1.0
+        #:scale 'linear
+        #:value-type 'default
+        #:suffix ""
+
+        #:show-value #t
+        #:show-ticks #t
+        #:show-labels #t
+        #:tick-count 4
+        #:tick-mode 'all
+        #:tick-labels '("SIN" "SQR" "SAW" "TRI")
+
+        #:morph-icon #t
+
+        #:row 20
+        #:col 17
+        #:row-span 4
+        #:col-span 8
+
+        #:margin-tb 6
+        #:margin-lr 8)
+
   ;; ============================================================
   ;; HARD BYPASS
   ;;
@@ -1727,26 +1982,26 @@ var id var))
   ;; ON  -> bypass totale
   ;; ============================================================
   (make <bypass-switch>
-        #:id "Bypass"
-        #:role 'bypass
+    #:id "Bypass"
+    #:role 'bypass
 
-        #:text "Bypass"
-        #:default-state #f
+    #:text "Bypass"
+    #:default-state #f
 
-        #:parameter-id "AFBypass"
-        #:parameter-name "Bypass"
-        #:processor-reference "Bypass"
-        #:version-hint 1
+    #:parameter-id "AFBypass"
+    #:parameter-name "Bypass"
+    #:processor-reference "Bypass"
+    #:version-hint 1
 
-        #:tooltip "To bypass the plugin"
+    #:tooltip "To bypass the plugin"
 
-        #:row 13
-        #:col 1
-        #:row-span 2
-        #:col-span 3
+    #:row 13
+    #:col 1
+    #:row-span 2
+    #:col-span 3
 
-        #:margin-tb 6
-        #:margin-lr 8)
+    #:margin-tb 6
+    #:margin-lr 8)
 
   ;; ============================================================
   ;; DSP BYPASS

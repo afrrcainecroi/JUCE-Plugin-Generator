@@ -316,6 +316,24 @@
 (define-public (RunProjucer)
   (system projucer-path))
 
+(define-public (ResaveProjucerProject dst-folder)
+
+  (let ((jucer-file
+         (string-append dst-folder "/JX11.jucer")))
+
+    (let ((status
+           (system*
+            projucer-path
+            "--resave"
+            jucer-file)))
+
+      (unless (zero? status)
+        (error "Projucer --resave failed"
+               jucer-file
+               status))))
+
+  #t)
+
 (define-public (CouldIRun?)
   ;;Check for zenity
   (define (zenity-usable?)
