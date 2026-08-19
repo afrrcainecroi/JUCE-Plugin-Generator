@@ -666,6 +666,88 @@
 	   #:code
 	   (register-screen! this))
 
+(define-public (generate-screen-size-code)
+  (unless *screen*
+    (error "<screen> has to be defined"))
+
+  (let ((ratio (assoc-ref *screen* 'ratio))
+        (width (assoc-ref *screen* 'width)))
+
+    (format #f
+"screenRatio = ~a;
+standardScreenWidth = ~a;
+standardScreenHeight = standardScreenWidth / screenRatio;
+"
+            ratio
+            width)))
+
+
+(define-public (generate-grid-code)
+
+  (unless *grid*
+    (error "<grid> has to be defined"))
+
+  (let* ((rows
+          (assoc-ref *grid* 'rows))
+
+         (cols
+          (assoc-ref *grid* 'cols))
+
+         (show-grid
+          (assoc-ref *grid* 'show-grid))
+
+         ;; Forma richiesta dal JSON esistente
+         (grid-data
+          `(("rows" . ,rows)
+            ("cols" . ,cols)))
+
+         (grid-json
+          (json-prepend-key
+           "grid"
+           grid-data))
+
+         (components-json
+          (json-prepend-key
+           "components"
+           (list->vector layout-data-components)))
+
+         (composed
+          (scm->json-string
+           (append grid-json components-json)
+           #:pretty #t)))
+
+    (string-append
+
+     ;; Debug grid
+     (format #f
+             "bool drawDebugGrid = ~a;\n"
+             (if show-grid
+                 "true"
+                 "false"))
+
+     ;; componentMap
+     "componentMap = {\n"
+
+     (apply
+      string-append
+      (map
+       (lambda (it)
+         (let ((name
+                (assoc-ref it 'var)))
+           (format #f
+                   "{\"~a\", &~a},\n"
+                   name
+                   name)))
+       layout-data-components))
+
+     "};\n"
+
+     ;; JSON layout
+     (format #f
+             "\njuce::String jsonString = R\"(~a)\";\n"
+             composed))))
+
+
 ;; ;;Old classes
 ;; ;;Lo schermo. Genera le configurazioni dello schermo , compresa la presenza o meno della griglia
 ;; (new-class <screen>

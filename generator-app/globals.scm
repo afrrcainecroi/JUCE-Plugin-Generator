@@ -134,7 +134,7 @@
 (eval-when (expand load eval compile)
   (define-constant-blocks
     INTERFACE
-    GRID
+    ;;GRID
     RESIZED
     FOOTER_MOUSE
     FOOTER_TIMER
@@ -143,7 +143,7 @@
     DPARAMS
     GETPARAMS
     VALUEPARAMS
-    SCREENSIZE
+    ;;SCREENSIZE
     DESTROY
     BACKGROUND
     OVERSAMPLING_PPC
@@ -240,7 +240,7 @@
 (define-public *OVERSAMPLING-useIntegerLatency* #t)
 ;;
 ;;la struttura per gestire il layout
-(define-public layout-data-grid '())
+;; (define-public layout-data-grid '())
 (define-public layout-data-components '())
 
 (define-public *components* '())

@@ -109,7 +109,7 @@
   (set! *OVERSAMPLING-isMaxQuality* #f)
   (set! *OVERSAMPLING-useIntegerLatency* #t)
   ;;Inizializza la struttura che definisce il layout (GRID START...)
-  (set! layout-data-grid '())
+  ;;(set! layout-data-grid '())
   (set! layout-data-components '())
   ;;
   (interface-definitions dst-folder new-name)
@@ -254,7 +254,7 @@
     (replace-between-flags PluginProcessor.h *DPARAMS::START* *DPARAMS::END* *DPARAMS*)
     (replace-between-flags PluginProcessor.cpp *GETPARAMS::START* *GETPARAMS::END* *GETPARAMS*)
     (replace-between-flags PluginProcessor.cpp *VALUEPARAMS::START* *VALUEPARAMS::END* *VALUEPARAMS*)
-    (replace-between-flags Utils.h *SCREENSIZE::START* *SCREENSIZE::END* *SCREENSIZE*)
+    (replace-between-flags Utils.cpp *SCREENSIZE::START* *SCREENSIZE::END* (generate-screen-size-code))
     ;;
     ;;La gestione dell'oversampling
     (replace-between-flags PluginProcessor.cpp *OVERSAMPLING_PPC::START* *OVERSAMPLING_PPC::END* *OVERSAMPLING_PPC*)
@@ -273,9 +273,9 @@
     (when (not *grid*)
       (Show! "<grid> has to be defined!!")
       (exit EXIT_FAILURE))
-    (set! layout-data-grid
-      `(("rows" . ,(assoc-ref *grid* 'rows))
-        ("cols" . ,(assoc-ref *grid* 'cols))))
+    ;; (set! layout-data-grid
+    ;;   `(("rows" . ,(assoc-ref *grid* 'rows))
+    ;;     ("cols" . ,(assoc-ref *grid* 'cols))))
     ;;
     ;;Components,  scritto come #(
     ;;    (("colSpan" . 8) ("rowSpan" . 1) ("col" . 8) ("row" . 1) ("id" . "lblMainTitle"))
@@ -285,22 +285,22 @@
       (Show! "<components> have to be defined!!")
       (exit EXIT_FAILURE))
     ;;
-    ;;Componiamo GRID e components...
-    ;;Prima componentmap e poi la stringa json di configurazione
-    (AppendStringTo *GRID* "componentMap = {\n")
-    (vector-for-each (lambda (idx it)
-		       (Show! "IT: " it)
-		       (let ((name (assoc-ref it 'var)))
-			 (AppendStringTo *GRID* (f-str "{!{name}, &${name}},\n" (the-environment)))))
-		     (list->vector layout-data-components))
-    (AppendStringTo *GRID* "};\n")
-    ;;
-    ;;Ed ora la stringa di configurazione
-    (let* ((grid (json-prepend-key "grid" layout-data-grid))
-	   (components (json-prepend-key "components" (list->vector layout-data-components)))
-	   (composed (scm->json-string (append grid components) #:pretty #t)))
-      (AppendStringTo *GRID* (f-str "\njuce::String jsonString = R\"(${composed})\";\n" (the-environment))))
-    (replace-between-flags PluginEditor.cpp *GRID::START* *GRID::END* *GRID*)
+    ;; ;;Componiamo GRID e components...
+    ;; ;;Prima componentmap e poi la stringa json di configurazione
+    ;; (AppendStringTo *GRID* "componentMap = {\n")
+    ;; (vector-for-each (lambda (idx it)
+    ;; 		       (Show! "IT: " it)
+    ;; 		       (let ((name (assoc-ref it 'var)))
+    ;; 			 (AppendStringTo *GRID* (f-str "{!{name}, &${name}},\n" (the-environment)))))
+    ;; 		     (list->vector layout-data-components))
+    ;; (AppendStringTo *GRID* "};\n")
+    ;; ;;
+    ;; ;;Ed ora la stringa di configurazione
+    ;; (let* ((grid (json-prepend-key "grid" layout-data-grid))
+    ;; 	   (components (json-prepend-key "components" (list->vector layout-data-components)))
+    ;; 	   (composed (scm->json-string (append grid components) #:pretty #t)))
+    ;;   (AppendStringTo *GRID* (f-str "\njuce::String jsonString = R\"(${composed})\";\n" (the-environment))))
+    (replace-between-flags PluginEditor.cpp *GRID::START* *GRID::END* (generate-grid-code))
     ;;
     ;;La gestione del fft o no fft (real plugin!)
     (unless aggiornamento
@@ -1282,14 +1282,14 @@ var id var))
 " bkg-id bkg-id))))
 ;;
 ;;non più utilizzata!
-(define*-public (ScreenSize #:key (ratio (/ (+ 1.0 (sqrt 5.0)) 2.0)) (width 800.0) (rows 21) (cols 34) show-grid)
-  (GenerateAssignements *SCREENSIZE*
-			(screenRatio ratio)
-			(standardScreenWidth width)
-			(standardScreenHeight "standardScreenWidth / screenRatio"))
-  (AppendStringTo *GRID* (string-append "bool drawDebugGrid = " (if show-grid "true;" "false;")))
-  )
-;;
+;; (define*-public (ScreenSize #:key (ratio (/ (+ 1.0 (sqrt 5.0)) 2.0)) (width 800.0) (rows 21) (cols 34) show-grid)
+;;   (GenerateAssignements *SCREENSIZE*
+;; 			(screenRatio ratio)
+;; 			(standardScreenWidth width)
+;; 			(standardScreenHeight "standardScreenWidth / screenRatio"))
+;;   (AppendStringTo *GRID* (string-append "bool drawDebugGrid = " (if show-grid "true;" "false;")))
+;;   )
+;; ;;
 
 
 
@@ -2069,7 +2069,7 @@ var id var))
     #:role 'bypass
 
     #:text "Bypass"
-    #:default-state #f
+    #:default-state #t
 
     #:parameter-id "AFBypass"
     #:parameter-name "Bypass"
