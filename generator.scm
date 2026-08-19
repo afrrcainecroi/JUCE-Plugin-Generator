@@ -91,6 +91,7 @@
  (generator-app tools)
  (generator-app genera-classi)
  (generator-app code-generator)
+ (generator-app generation-state)
  )
 
 ;;
@@ -255,7 +256,7 @@
     (replace-between-flags PluginProcessor.cpp *WETDRY_PPC_PREFIX::START* *WETDRY_PPC_PREFIX::END* *WETDRY_PPC_PREFIX*)
     (replace-between-flags PluginProcessor.cpp *WETDRY_PPC_POSTFIX::START* *WETDRY_PPC_POSTFIX::END* *WETDRY_PPC_POSTFIX*)
     ;;
-    (when (not *grid*)
+    (when (not (generation-grid))
       (Show! "<grid> has to be defined!!")
       (exit EXIT_FAILURE))
     (replace-between-flags PluginEditor.cpp *GRID::START* *GRID::END* (generate-grid-code))
