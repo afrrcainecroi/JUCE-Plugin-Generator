@@ -696,7 +696,9 @@ standardScreenHeight = standardScreenWidth / screenRatio;
          (show-grid
           (assoc-ref *grid* 'show-grid))
 
-         ;; Forma richiesta dal JSON esistente
+         (layout-components
+          (generate-layout-data-components))
+
          (grid-data
           `(("rows" . ,rows)
             ("cols" . ,cols)))
@@ -709,7 +711,7 @@ standardScreenHeight = standardScreenWidth / screenRatio;
          (components-json
           (json-prepend-key
            "components"
-           (list->vector layout-data-components)))
+           (list->vector layout-components)))
 
          (composed
           (scm->json-string
@@ -718,14 +720,12 @@ standardScreenHeight = standardScreenWidth / screenRatio;
 
     (string-append
 
-     ;; Debug grid
      (format #f
              "bool drawDebugGrid = ~a;\n"
              (if show-grid
                  "true"
                  "false"))
 
-     ;; componentMap
      "componentMap = {\n"
 
      (apply
@@ -738,11 +738,10 @@ standardScreenHeight = standardScreenWidth / screenRatio;
                    "{\"~a\", &~a},\n"
                    name
                    name)))
-       layout-data-components))
+       layout-components))
 
      "};\n"
 
-     ;; JSON layout
      (format #f
              "\njuce::String jsonString = R\"(~a)\";\n"
              composed))))
@@ -1380,10 +1379,10 @@ standardScreenHeight = standardScreenWidth / screenRatio;
 		  *components*))
       ;; Per ora alimentiamo anche il vecchio sistema di layout.
       ;; In futuro layout-data-components verrà prodotto dal solver.
-      (set! layout-data-components
-	    (cons
-	     (component-model->layout-model registered-model)
-	     layout-data-components))
+      ;; (set! layout-data-components
+      ;; 	    (cons
+      ;; 	     (component-model->layout-model registered-model)
+      ;; 	     layout-data-components))
       registered-model)))
 
 (define (component-cpp-var component)
@@ -2127,7 +2126,11 @@ standardScreenHeight = standardScreenWidth / screenRatio;
      (error "Invalid label justification"
             justification))))
 
-(define (selector-items->cpp var items)
+(define-public (generate-layout-data-components)
+  (map component-model->layout-model
+       (reverse *components*)))
+
+(define-public (selector-items->cpp var items)
   (apply
    string-append
    (map
