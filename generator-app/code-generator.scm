@@ -2320,7 +2320,9 @@ float value_~a;~%"
    (generate-process-bypass)
    (generate-process-input-gain)
    (generate-process-input-meter)
+   (generate-process-wetdry-prefix)
    (generate-process-dsp)
+   (generate-process-wetdry-postfix)
    (generate-process-output-gain)
    (generate-process-output-meter)
    (generate-process-scope)))
@@ -2571,3 +2573,89 @@ float value_~a;~%"
      (if bypass-model
          "    }\n"
          ""))))
+
+
+(define-public (generate-process-wetdry-prefix)
+  (if (role-present? 'wet-dry)
+      "    // DRY COPY
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        dryBuffer.copyFrom(
+            ch,
+            0,
+            buffer.getReadPointer(ch),
+            buffer.getNumSamples());
+
+"
+      ""))
+
+(define (generate-process-wetdry-postfix)
+  (let ((model (role-model 'wet-dry)))
+    (if model
+        (let* ((ref (assoc-ref model 'processor-reference))
+               (min (assoc-ref model 'min))
+               (max (assoc-ref model 'max)))
+          (format #f
+"    // WET / DRY MIX
+    {
+        const float wetMix =
+            juce::jlimit(
+                0.0f,
+                1.0f,
+                (value_~a - ~af) / (~af - ~af));
+
+        const float dryMix = 1.0f - wetMix;
+
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        {
+            auto* wet = buffer.getWritePointer(ch);
+            const auto* dry = dryBuffer.getReadPointer(ch);
+            const int numSamples = buffer.getNumSamples();
+
+            juce::FloatVectorOperations::multiply(
+                wet,
+                wetMix,
+                numSamples);
+
+            juce::FloatVectorOperations::addWithMultiply(
+                wet,
+                dry,
+                dryMix,
+                numSamples);
+        }
+    }
+
+"
+                  ref min max min))
+        "")))
+
+(define (generate-oversampling-prepare-code)
+  (if (role-present? 'oversampling)
+      "    // OVERSAMPLING
+    oversampling2x =
+        std::make_unique<juce::dsp::Oversampling<float>>(
+            getTotalNumInputChannels(),
+            1,
+            juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR);
+
+    oversampling4x =
+        std::make_unique<juce::dsp::Oversampling<float>>(
+            getTotalNumInputChannels(),
+            2,
+            juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR);
+
+    oversampling8x =
+        std::make_unique<juce::dsp::Oversampling<float>>(
+            getTotalNumInputChannels(),
+            3,
+            juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR);
+
+    oversampling2x->initProcessing(samplesPerBlock);
+    oversampling4x->initProcessing(samplesPerBlock);
+    oversampling8x->initProcessing(samplesPerBlock);
+
+    oversampling2x->reset();
+    oversampling4x->reset();
+    oversampling8x->reset();
+
+"
+      ""))

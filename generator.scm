@@ -1659,60 +1659,125 @@ var id var))
   ;; ============================================================
   ;; CUTOFF
   ;; ============================================================
+  ;; (make <rotary-slider>
+  ;;       #:id "Cutoff Frequency"
+
+  ;;       #:parameter-id "cutoff"
+  ;;       #:parameter-name "Cutoff"
+  ;;       #:processor-reference "cutoff"
+
+  ;;       #:title "CUTOFF"
+  ;;       ;; #:min 20.0
+  ;;       ;; #:max 20000.0
+  ;;       ;; #:default 1000.0
+  ;;       ;; #:scale 'logarithmic
+  ;;       ;; #:value-type 'freq
+  ;;       ;; #:suffix " Hz"
+	
+  ;; 	#:show-ticks #t
+  ;; 	#:show-labels #t
+  ;; 	#:tick-count 5
+  ;; 	;; #:tick-mode 'all
+  ;; 	;; #:tick-labels '("MIN" "25" "50" "75" "MAX")
+
+  ;; 	#:min 0.0
+  ;; 	#:max 5.0
+  ;; 	#:interval 1.0
+  ;; 	#:icon-set "waveforms"
+  ;; 	#:morph-icon #t
+
+	
+
+  ;;       #:row 4
+  ;;       #:col 7
+  ;;       #:row-span 4
+  ;;       #:col-span 4
+
+  ;;       #:margin-tb 6
+  ;;       #:margin-lr 8)
+
   (make <rotary-slider>
-        #:id "Cutoff Frequency"
+      #:id "Oversampling"
 
-        #:parameter-id "cutoff"
-        #:parameter-name "Cutoff"
-        #:processor-reference "cutoff"
+      #:role 'oversampling
 
-        #:title "CUTOFF"
-        ;; #:min 20.0
-        ;; #:max 20000.0
-        ;; #:default 1000.0
-        ;; #:scale 'logarithmic
-        ;; #:value-type 'freq
-        ;; #:suffix " Hz"
-	
-	#:show-ticks #t
-	#:show-labels #t
-	#:tick-count 5
-	;; #:tick-mode 'all
-	;; #:tick-labels '("MIN" "25" "50" "75" "MAX")
+      #:parameter-id "oversampling"
+      #:parameter-name "Oversampling"
+      #:processor-reference "oversampling"
 
-	#:min 0.0
-	#:max 5.0
-	#:interval 1.0
-	#:icon-set "waveforms"
-	#:morph-icon #t
+      #:title "OS"
+      #:min 0.0
+      #:max 3.0
+      #:default 0.0
+      #:interval 1.0
+      #:scale 'linear
+      #:value-type 'default
+      #:suffix "x"
 
-	
+      #:show-value #t
+      #:show-ticks #t
+      #:show-labels #t
+      #:tick-count 4
+      #:tick-mode 'all
+      #:tick-labels '("1x" "2x" "4x" "8x")
 
-        #:row 4
-        #:col 7
-        #:row-span 4
-        #:col-span 4
+      #:row 4
+      #:col 7
+      #:row-span 4
+      #:col-span 4
 
-        #:margin-tb 6
-        #:margin-lr 8)
+      #:margin-tb 6
+      #:margin-lr 8
+)
+
+  (make <rotary-slider>
+    #:id "Wet Dry"
+
+    #:role 'wet-dry
+
+    #:parameter-id "wetDry"
+    #:parameter-name "Wet Dry"
+    #:processor-reference "wetDry"
+
+    #:title "MIX"
+    #:min 0.0
+    #:max 100.0
+    #:default 100.0
+    #:interval 1.0
+    #:scale 'linear
+    #:value-type 'default
+    #:suffix "%"
+
+    #:show-value #t
+    #:show-ticks #t
+    #:show-labels #t
+    #:tick-count 5
+    #:tick-mode 'all
+    #:row 12
+    #:col 7
+    #:row-span 4
+    #:col-span 4
+
+    #:margin-tb 6
+    #:margin-lr 8)
 
   ;; ============================================================
   ;; SCOPE
   ;; ============================================================
   (make <scope>
-        #:id "Scope Visualizer"
-        #:role 'scope
+    #:id "Scope Visualizer"
+    #:role 'scope
 
-        #:grid-style 'default
-        #:glow-multiplier 1.0
+    #:grid-style 'default
+    #:glow-multiplier 1.0
 
-        #:row 5
-        #:col 11
-        #:row-span 5
-        #:col-span 7
+    #:row 5
+    #:col 11
+    #:row-span 5
+    #:col-span 7
 
-        #:margin-tb 8
-        #:margin-lr 8)
+    #:margin-tb 8
+    #:margin-lr 8)
 
   ;; ============================================================
   ;; OUTPUT GAIN
