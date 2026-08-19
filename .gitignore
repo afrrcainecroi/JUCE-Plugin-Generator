@@ -19,6 +19,7 @@ generator-app/*
 !generator-app/generation-state.scm
 !generator-app/resources.scm
 !generator-app/layout.scm
+!generator-app/dsl-model.scm
 !generator-app/genera-classi.scm
 !generator-app/globals.scm
 !generator-app/tools.scm
