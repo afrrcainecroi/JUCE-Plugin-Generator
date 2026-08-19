@@ -25,6 +25,7 @@ generator-app/*
 !generator-app/cpp-generation-common.scm
 !generator-app/cpp-generation.scm
 !generator-app/dsp-generation.scm
+!generator-app/generation-orchestration.scm
 !generator-app/genera-classi.scm
 !generator-app/globals.scm
 !generator-app/tools.scm

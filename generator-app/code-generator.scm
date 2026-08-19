@@ -93,6 +93,7 @@
   #:use-module (generator-app cpp-generation-common)
   #:use-module (generator-app cpp-generation)
   #:use-module (generator-app dsp-generation)
+  #:use-module (generator-app generation-orchestration)
   #:re-export (register-image-set!
                register-component!
                validate-component!
@@ -268,24 +269,17 @@
                selector-items->cpp
                generate-process-code
                generate-process-wetdry-prefix
-               generate-paint-over-children-code)
+               generate-paint-over-children-code
+               generate-member-declarations
+               generate-constructor-code
+               generate-attachment-declarations
+               generate-attachment-code
+               generate-parameter-code
+               generate-dparams-code
+               generate-getparams-code
+               generate-valueparams-code
+               generate-destroy-code)
   )
-
-(define-public (generate-member-declarations)
-  (apply string-append
-         (map model->member-declaration
-              (reverse (generation-components)))))
-
-
-(define-public (generate-constructor-code)
-  (apply string-append
-         (map model->constructor-code
-              (reverse (generation-components)))))
-
-(define-public (generate-attachment-declarations)
-  (apply string-append
-         (map model->attachment-declaration
-              (reverse (generation-components)))))
 
 ;; (define-method (model->attachment-code (model <list>))
 ;;   (let ((type         (assoc-ref model 'type))
@@ -313,11 +307,6 @@
 ;;                (cpp-string parameter-id)
 ;;                var))
 ;;       (else ""))))
-(define-public (generate-attachment-code)
-  (apply string-append
-         (map model->attachment-code
-              (reverse (generation-components)))))
-
 ;; (define-method (model->parameter-code (model <list>))
 ;;   (let ((type           (assoc-ref model 'type))
 ;;         (parameter-id   (assoc-ref model 'parameter-id))
@@ -353,13 +342,6 @@
 ;;       (else
 ;;        ""))))
 
-(define-public (generate-parameter-code)
-
-  (apply string-append
-         (map model->parameter-code
-              (reverse (generation-components)))))
-
-
 ;; (define-method (model->dparams-code (model <list>))
 ;;   (let ((type      (assoc-ref model 'type))
 ;;         (reference (assoc-ref model 'processor-reference)))
@@ -371,12 +353,6 @@
 ;;                reference
 ;;                reference))
 ;;       (else ""))))
-
-(define-public (generate-dparams-code)
-  (apply string-append
-         (map model->dparams-code
-              (reverse (generation-components)))))
-
 
 ;; (define-method (model->getparams-code (model <list>))
 ;;   (let ((type         (assoc-ref model 'type))
@@ -390,11 +366,6 @@
 ;;                (cpp-string parameter-id)))
 ;;       (else ""))))
 
-(define-public (generate-getparams-code)
-  (apply string-append
-         (map model->getparams-code
-              (reverse (generation-components)))))
-
 ;; (define-method (model->valueparams-code (model <list>))
 ;;   (let ((type      (assoc-ref model 'type))
 ;;         (reference (assoc-ref model 'processor-reference)))
@@ -405,16 +376,6 @@
 ;;                reference
 ;;                reference))
 ;;       (else ""))))
-
-(define-public (generate-valueparams-code)
-  (apply string-append
-         (map model->valueparams-code
-              (reverse (generation-components)))))
-
-(define-public (generate-destroy-code)
-  (apply string-append
-         (map model->destroy-code
-              (reverse (generation-components)))))
 
 (define (generate-oversampling-prepare-code)
   (if (role-present? 'oversampling)
