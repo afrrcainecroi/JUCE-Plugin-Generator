@@ -89,6 +89,7 @@
   #:use-module (generator-app layout)
   #:use-module (generator-app dsl-model)
   #:use-module (generator-app validation)
+  #:use-module (generator-app registration)
   #:re-export (register-image-set!
                register-component!
                validate-component!
@@ -240,101 +241,22 @@
                palette:row-span-selector
                palette:col-span-selector
                palette:margin-tb-selector
-               palette:margin-lr-selector)
+               palette:margin-lr-selector
+               find-component
+               find-component-by-role
+               component-id-used?
+               component-role-used?
+               validate-component-role
+               role-present?
+               role-model
+               component-cpp-var
+               slider-parameter-type?
+               button-parameter-type?
+               parameter-component-type?
+               processor-param-var
+               processor-value-var
+               processor-reference)
   )
-
-;; COMPONENT MODEL
-;; ======================================================================
-(define *unique-component-roles*
-  '(input-gain
-    output-gain
-    wet-dry
-    bypass
-    dsp-bypass
-    oversampling
-    input-meter
-    output-meter
-    scope))
-
-(define-public (processor-param-var model)
-  (string-append
-   "param_"
-   (assoc-ref model 'processor-reference)))
-
-(define-public (processor-value-var model)
-  (string-append
-   "value_"
-   (assoc-ref model 'processor-reference)))
-
-(define-public (processor-reference model)
-  (assoc-ref model 'processor-reference))
-
-;; COMPONENT REGISTRY
-;;
-;; *components* continua ad essere il registro centrale.
-;;
-;; register-component! supporta:
-;;
-;;   1. alist legacy già costruiti
-;;   2. nuovi oggetti derivati da <component>
-;;
-;; ======================================================================
-;; ----------------------------------------------------------------------
-;; Ricerca per logical ID
-;; ----------------------------------------------------------------------
-(define-public (find-component id)
-  (find
-   (lambda (component)
-     (equal? (assoc-ref component 'id)
-             id))
-   (generation-components)))
-
-(define-public (find-component-by-role role)
-  (find
-   (lambda (component)
-     (equal? (assoc-ref component 'role) role))
-   (generation-components)))
-
-(define-public (component-role-used? role)
-  (if (find-component-by-role role) #t #f))
-
-(define-public (validate-component-role model)
-  (let ((role (assoc-ref model 'role)))
-    (when (and role
-               (memq role *unique-component-roles*)
-               (find-component-by-role role))
-      (error "Duplicate component role" role)))
-  #t)
-(define-public (role-present? role)
-  (if (find-component-by-role role) #t #f))
-
-(define-public (role-model role)
-  (find-component-by-role role))
-;;
-;; ----------------------------------------------------------------------
-;; Verifica esistenza logical ID
-;; ----------------------------------------------------------------------
-(define-public (component-id-used? id)
-  (if (find-component id)
-      #t
-      #f))
-
-(define-public (slider-parameter-type? type)
-  (memq type
-        '(rotary-slider
-          linear-slider)))
-
-(define-public (button-parameter-type? type)
-  (memq type
-        '(toggle-button
-          normal-toggle-button
-          switch
-          bypass-switch)))
-
-(define-public (parameter-component-type? type)
-  (or (slider-parameter-type? type)
-      (button-parameter-type? type)))
-
 
 (define (slider-properties->cpp model)
   (let ((var         (assoc-ref model 'var))
@@ -433,102 +355,6 @@
       (else
        (error "Invalid slider scale"
               scale)))))
-
-;; ======================================================================
-;; REGISTRAZIONE LEGACY
-;;
-;; Palette, header/footer e gli altri componenti non ancora migrati
-;; possono continuare a passare un alist già costruito.
-;; ======================================================================
-(define-method (register-component! (component <list>))
-  (validate-component-model component)
-  (let ((id (assoc-ref component 'id)))
-    (when (component-id-used? id)
-      (scm-error 'misc-error
-                 #f
-                 "Duplicate component logical id ~S"
-                 (list id)
-                 #f)))
-  (prepend-generation-component! component))
-
-;; ======================================================================
-;; REGISTRAZIONE NUOVO MODELLO GOOPS
-;;
-;; Oggetto <component>
-;;      |
-;;      v
-;; component->model
-;;      |
-;;      v
-;; logical-id
-;;      |
-;;      v
-;; allocate-cpp-identifier!
-;;      |
-;;      v
-;; aggiunta di (var . ...)
-;;      |
-;;      v
-;; *components*
-;; ======================================================================
-(define-method (register-component! (component <component>))
-  (validate-component! component)
-  (let* ((model
-          (component->model component))
-         (logical-id
-          (assoc-ref model 'id)))
-    ;; ------------------------------------------------------------
-    ;; Un nuovo componente deve sempre avere un logical ID.
-    ;; ------------------------------------------------------------
-    (unless logical-id
-      (error "Component without logical id"
-             model))
-    ;; ------------------------------------------------------------
-    ;; Il logical ID deve essere unico.
-    ;;
-    ;; Questo controllo DEVE avvenire prima dell'allocazione
-    ;; dell'identificatore C++.
-    ;; ------------------------------------------------------------
-    (when (component-id-used? logical-id)
-      (error "Duplicate component logical id"
-             logical-id))
-    ;; ------------------------------------------------------------
-    ;; I role semantici dichiarati unici non possono comparire
-    ;; più di una volta.
-    ;; ------------------------------------------------------------
-    (validate-component-role model)
-    ;; ------------------------------------------------------------
-    ;; Solo ora viene allocato il nome C++.
-    ;; ------------------------------------------------------------
-    (let* ((cpp-id
-            (allocate-cpp-identifier!
-             logical-id))
-           (registered-model
-            `((var . ,cpp-id)
-              ,@model)))
-      ;; ----------------------------------------------------------
-      ;; component-type deve aver prodotto un tipo valido.
-      ;; ----------------------------------------------------------
-      (unless (assoc-ref registered-model 'type)
-        (error "Component without type"
-               registered-model))
-      ;; ----------------------------------------------------------
-      ;; Registrazione definitiva.
-      ;; ----------------------------------------------------------
-      (prepend-generation-component! registered-model))))
-
-(define (component-cpp-var component)
-  (let* ((id (component:id component))
-         (registered (find-component id)))
-    (unless registered
-      (error "Component not registered" id))
-    (let ((var
-           (assoc-ref registered 'var)))
-      (unless var
-        (error "Registered component without C++ identifier"
-               registered))
-      var)))
-(export component-cpp-var)
 
 (define-method (component->member-declaration (s <slider>))
   (format #f

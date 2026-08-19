@@ -21,6 +21,7 @@ generator-app/*
 !generator-app/layout.scm
 !generator-app/dsl-model.scm
 !generator-app/validation.scm
+!generator-app/registration.scm
 !generator-app/genera-classi.scm
 !generator-app/globals.scm
 !generator-app/tools.scm
