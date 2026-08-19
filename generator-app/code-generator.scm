@@ -747,23 +747,6 @@ standardScreenHeight = standardScreenWidth / screenRatio;
              composed))))
 
 
-;; ;;Old classes
-;; ;;Lo schermo. Genera le configurazioni dello schermo , compresa la presenza o meno della griglia
-;; (new-class <screen>
-;; 	   ((ratio (/ (+ 1.0 (sqrt 5.0)) 2.0)) ; Diventerà #:init-form
-;; 	    (width 800)			; Diventerà #:init-value
-;; 	    (rows 15)			; Diventerà #:init-value
-;; 	    (cols 24)
-;; 	    (show-grid #t))		; Diventerà #:init-value
-;; 	   #:code
-;; 	   (begin
-;; 	     (GenerateAssignements *SCREENSIZE*
-;; 				   (screenRatio ratio)
-;; 				   (standardScreenWidth width)
-;; 				   (standardScreenHeight "standardScreenWidth / screenRatio"))
-;; 	     ;; (AppendStringTo *GRIDONOFF* (string-append "bool drawDebugGrid = " (if show-grid "true;\n" "false;\n")))
-;; 	     (set! layout-data-grid `(("rows" . ,rows)("cols" . ,cols)))))
-
 ;; header e footer
 (new-class <header-footer>
 	   (
@@ -1377,12 +1360,6 @@ standardScreenHeight = standardScreenWidth / screenRatio;
       (set! *components*
 	    (cons registered-model
 		  *components*))
-      ;; Per ora alimentiamo anche il vecchio sistema di layout.
-      ;; In futuro layout-data-components verrà prodotto dal solver.
-      ;; (set! layout-data-components
-      ;; 	    (cons
-      ;; 	     (component-model->layout-model registered-model)
-      ;; 	     layout-data-components))
       registered-model)))
 
 (define (component-cpp-var component)

@@ -108,10 +108,6 @@
   (set! *OVERSAMPLING-FILTER* 'filterHalfBandPolyphaseIIR)
   (set! *OVERSAMPLING-isMaxQuality* #f)
   (set! *OVERSAMPLING-useIntegerLatency* #t)
-  ;;Inizializza la struttura che definisce il layout (GRID START...)
-  ;;(set! layout-data-grid '())
-  ;; (set! layout-data-components '())
-  ;;
   (interface-definitions dst-folder new-name)
 
   ;; Materializza le RESOURCE dichiarate dalla DSL.
@@ -220,13 +216,6 @@
 	(set! *SYNTH_H_RP* CODICE-NON-PER-FFT))
     ;;
 
-    ;; (AppendStringTo *RESIZED* "
-    ;;     // Label THEME al 68% di X, larga 8%, alta 5%
-    ;;     lblPalette.setBounds(ap.drawingUtils.getScaledBounds(680, 40, 80, 50));
-    ;;     // Combo Box al 77% di X, larga 20%, alta 5%
-    ;;     paletteSelector.setBounds(ap.drawingUtils.getScaledBounds(770, 40, 200, 50));
-    ;; ")
-    ;;
     ;; (letrec-syntax ((show
     ;; 		     (syntax-rules ()
     ;; 		       ((show)
@@ -266,40 +255,9 @@
     (replace-between-flags PluginProcessor.cpp *WETDRY_PPC_PREFIX::START* *WETDRY_PPC_PREFIX::END* *WETDRY_PPC_PREFIX*)
     (replace-between-flags PluginProcessor.cpp *WETDRY_PPC_POSTFIX::START* *WETDRY_PPC_POSTFIX::END* *WETDRY_PPC_POSTFIX*)
     ;;
-    ;;In base al contenuto di layout-data, aggiorna *GRID*
-    ;; (when (null? layout-data-grid) ;; scritto come (("columns" . 24) ("rows" . 15))
-    ;;   (Show! "<grid> has to be defined!!")
-    ;;   (exit EXIT_FAILURE))
     (when (not *grid*)
       (Show! "<grid> has to be defined!!")
       (exit EXIT_FAILURE))
-    ;; (set! layout-data-grid
-    ;;   `(("rows" . ,(assoc-ref *grid* 'rows))
-    ;;     ("cols" . ,(assoc-ref *grid* 'cols))))
-    ;;
-    ;;Components,  scritto come #(
-    ;;    (("colSpan" . 8) ("rowSpan" . 1) ("col" . 8) ("row" . 1) ("id" . "lblMainTitle"))
-    ;;    (("margin_tb" . 12) ("colSpan" . 2) ("rowSpan" . 1) ("col" . 20) ("row" . 1) ("id" . "lblPalette"))
-    ;;)
-    ;; (when (null? layout-data-components)
-    ;;   (Show! "<components> have to be defined!!")
-    ;;   (exit EXIT_FAILURE))
-    ;;
-    ;; ;;Componiamo GRID e components...
-    ;; ;;Prima componentmap e poi la stringa json di configurazione
-    ;; (AppendStringTo *GRID* "componentMap = {\n")
-    ;; (vector-for-each (lambda (idx it)
-    ;; 		       (Show! "IT: " it)
-    ;; 		       (let ((name (assoc-ref it 'var)))
-    ;; 			 (AppendStringTo *GRID* (f-str "{!{name}, &${name}},\n" (the-environment)))))
-    ;; 		     (list->vector layout-data-components))
-    ;; (AppendStringTo *GRID* "};\n")
-    ;; ;;
-    ;; ;;Ed ora la stringa di configurazione
-    ;; (let* ((grid (json-prepend-key "grid" layout-data-grid))
-    ;; 	   (components (json-prepend-key "components" (list->vector layout-data-components)))
-    ;; 	   (composed (scm->json-string (append grid components) #:pretty #t)))
-    ;;   (AppendStringTo *GRID* (f-str "\njuce::String jsonString = R\"(${composed})\";\n" (the-environment))))
     (replace-between-flags PluginEditor.cpp *GRID::START* *GRID::END* (generate-grid-code))
     ;;
     ;;La gestione del fft o no fft (real plugin!)
@@ -1281,26 +1239,8 @@ var id var))
 
 " bkg-id bkg-id))))
 ;;
-;;non più utilizzata!
-;; (define*-public (ScreenSize #:key (ratio (/ (+ 1.0 (sqrt 5.0)) 2.0)) (width 800.0) (rows 21) (cols 34) show-grid)
-;;   (GenerateAssignements *SCREENSIZE*
-;; 			(screenRatio ratio)
-;; 			(standardScreenWidth width)
-;; 			(standardScreenHeight "standardScreenWidth / screenRatio"))
-;;   (AppendStringTo *GRID* (string-append "bool drawDebugGrid = " (if show-grid "true;" "false;")))
-;;   )
-;; ;;
-
-
-
 ;;
 (define*-public (ConfigureApp palette screen)
-  ;; (GenerateAssignements *SCREENSIZE*
-  ;; 			(screenRatio (ratio screen))
-  ;; 			(standardScreenWidth (width screen))
-  ;; 			(standardScreenHeight "standardScreenWidth / screenRatio"))
-  ;; (AppendStringTo *GRID* (string-append "bool drawDebugGrid = " (if (show-grid screen) "true;" "false;")))
-  ;;
   ;;Attivazione della palette
   ;; { "id": "lblPalette",      "row":  1, "col": 20, "rowSpan":  1, "colSpan":  2, "margin_tb": 12 },
   ;; { "id": "paletteSelector", "row":  1, "col": 22, "rowSpan":  1, "colSpan":  3, "margin_tb": 10, "margin_lr": 4 },
@@ -1420,7 +1360,6 @@ var id var))
 ;;Questa è la specifica dell'interfaccia per il progetto ZNew
 ;;
 (define (Generic-interface-definitions dst-folder new-name)
-  ;(ScreenSize #:width 900) ;;per farlo in rapporto aureo
   (make <screen> #:width 900)
   (GenerateVerticalLogSlider "inputdB" "Input dB" 50 100 80 300 "Logarithmic VSlider modificato" "LogVSliderID" "Sono input log")
   (GenerateHorizontalLogSlider "volumedB" "VolumedB" 150 100 300 80 "Logarithmic Slider" "LogSliderID" "Sono Volume log")
@@ -1442,7 +1381,7 @@ var id var))
   )
 
 (define (YANew-interface-definitions dst-folder new-name)
-  (make <screen> #:width 900);;(ScreenSize #:width 800) ;;per farlo in rapporto aureo (640x400)
+  (make <screen> #:width 900)
   (GenerateVerticalLogSlider "inputdB" "Input dB" 100 100 80 250 "Logarithmic input slider" "ID01" "input gain")
   (GenerateRotarySlider "RotSld" '() "My Rotary Slider" 200 100 100 100 "Rotary Slider" "RotarySliderID" 0 100 50 "Sono un rotary!")
   (GenerateVerticalLogSlider "outputdB" "output dB" 420 100 80 250 "Logarithmic output slider" "ID02" "output gain")
@@ -1455,7 +1394,7 @@ var id var))
 ;;(MakeNewProject "ZNew" ZNew-interface-definitions)
 
 (define (YAVibrato-interface-definitions dst-folder new-name)
-  (make <screen> #:width 900);;(ScreenSize #:width 730) ;;per farlo in rapporto aureo
+  (make <screen> #:width 900)
   (GenerateVerticalLogSlider "inputdB" "Volume In" 50 100 80 400 "Log in volume" "VolumeInID" "Sono input log")
   (GenerateVerticalLogSlider "outputdB" "Volume out" 600 100 80 400  "Log out volume" "VolumeOutID" "Sono output log")
   (GenerateBypassToggle 50 520)
@@ -1470,7 +1409,7 @@ var id var))
   )
 
 (define (YASwapper-interface-definitions dst-folder new-name)
-  (make <screen> #:width 900);;(ScreenSize #:width 900) ;;per farlo in rapporto aureo
+  (make <screen> #:width 900)
   (GenerateVerticalLogSlider "inputdB" "Volume In" 50 100 80 400 "Log in volume" "VolumeInID" "Sono input log")
   (GenerateVerticalLogSlider "outputdB" "Volume out" 750 100 80 400  "Log out volume" "VolumeOutID" "Sono output log")
   (GenerateBypassToggle 50 520)
@@ -1485,7 +1424,7 @@ var id var))
   )
 
 (define (YADelay-interface-definitions dst-folder new-name)
-  (make <screen> #:width 900);;(ScreenSize #:width 900) ;;per farlo in rapporto aureo
+  (make <screen> #:width 900)
   (GenerateVerticalLogSlider "inputdB" "Volume In" 50 100 80 400 "Log in volume" "VolumeInID" "Sono input log")
   (GenerateVerticalLogSlider "outputdB" "Volume out" 750 100 80 400  "Log out volume" "VolumeOutID" "Sono output log")
   (GenerateBypassToggle 50 590)
@@ -1503,7 +1442,7 @@ var id var))
 (define (YAConvReverbero-interface-definitions dst-folder new-name)
   (let ((values '("1 Halls 01 Large Hall" "1 Halls 02 Medium Hall" "1 Halls 03 Small Hall" "1 Halls 04 Large & Near" "1 Halls 05 Medium & Near" "1 Halls 06 Small & Near" "1 Halls 07 Large & Dark" "1 Halls 08 Large & Deep" "1 Halls 09 Medium & Deep" "1 Halls 10 Concert Hall" "1 Halls 11 Gold Hall" "1 Halls 12 Sandors Hall" "1 Halls 13 Dense Hall" "1 Halls 14 Clear Hall" "1 Halls 15 Brass Hall" "1 Halls 16 Amsterdam Hall" "1 Halls 17 Berliner Hall" "1 Halls 18 Boston Hall A" "1 Halls 19 Boston Hall B" "1 Halls 20 Chicago Hall" "1 Halls 21 Vienna Hall" "1 Halls 22 Worcester Hall" "1 Halls 23 The ArchDuke" "1 Halls 24 Troy Music Hall" "1 Halls 25 Saint Sylvain" "1 Halls 26 Mechanics Hall" "1 Halls 27 Saint Gerold" "2 Plates 01 Bright Plate" "2 Plates 02 Dark Plate" "2 Plates 03 London Plate" "2 Plates 04 Snare Plate A" "2 Plates 05 Snare Plate B" "2 Plates 06 Vocal Plate" "2 Plates 07 Old Plate" "2 Plates 08 Rich Plate" "2 Plates 09 Gold Plate" "2 Plates 10 Dense Plate" "2 Plates 11 Silver Plate" "2 Plates 12 Percussion Plate" "2 Plates 13 Echo Plate" "2 Plates 14 CD Plate A" "2 Plates 15 CD Plate B" "2 Plates 16 Large Plate" "2 Plates 17 Small Plate" "2 Plates 18 Fat Plate" "2 Plates 19 Crystal Plate" "2 Plates 20 Sun Plate A" "2 Plates 21 Sun Plate B" "2 Plates 22 Sun Plate C" "2 Plates 23 Vocal Plate B" "3 Rooms 01 Studio A" "3 Rooms 02 Studio B Close" "3 Rooms 03 Studio B Far" "3 Rooms 04 Studio C" "3 Rooms 05 Studio D" "3 Rooms 06 Studio E" "3 Rooms 07 Deep Stone" "3 Rooms 08 Music Room" "3 Rooms 09 Heavy Room" "3 Rooms 10 Large Wooden Room" "3 Rooms 11 Small Wooden Room" "3 Rooms 12 Large Tiled Room" "3 Rooms 13 Medium Tiled Room" "3 Rooms 14 Small Tiled Room" "3 Rooms 15 Drum & Chamber" "3 Rooms 16 Djangos Room" "3 Rooms 17 Small Vox Room" "3 Rooms 18 Glass Room" "3 Rooms 19 Percussion Room" "3 Rooms 20 Marble Foyer" "3 Rooms 21 Large & Room" "3 Rooms 22 Small & Room" "3 Rooms 23 Large Red Room" "3 Rooms 24 Red Room" "3 Rooms 25 Blue Room" "3 Rooms 26 Large Room" "3 Rooms 27 Small Room" "3 Rooms 28 Front Room" "3 Rooms 29 Center Room" "3 Rooms 30 Back Room" "3 Rooms 31 Studio K" "3 Rooms 32 Waits Room" "3 Rooms 33 Corn Room" "3 Rooms 34 Oakland Room" "3 Rooms 35 SF Perf Room" "4 Chambers 01 Large Chamber" "4 Chambers 02 Medium Chamber" "4 Chambers 03 Small Chamber" "4 Chambers 04 Large & Dark" "4 Chambers 05 Small & Dark" "4 Chambers 06 Large & Bright" "4 Chambers 07 Small & Bright" "4 Chambers 08 Kick Chamber" "4 Chambers 09 Snare Chamber" "4 Chambers 10 Vocal Chamber" "4 Chambers 11 A&M Chamber" "4 Chambers 12 CD Chamber" "4 Chambers 13 Old Chamber" "4 Chambers 14 Deep Chamber" "4 Chambers 15 Amb Chamber A" "4 Chambers 16 Amb Chamber B" "4 Chambers 17 Sunset Chamber" "5 Ambiences 01 Large Ambience" "5 Ambiences 02 Medium Ambience" "5 Ambiences 03 Small Ambience" "5 Ambiences 04 Large & Dark" "5 Ambiences 05 Medium & Dark" "5 Ambiences 06 Small & Dark" "5 Ambiences 07 Large & Bright" "5 Ambiences 08 Medium & Bright" "5 Ambiences 09 Small & Bright" "5 Ambiences 10 Deep Ambience" "5 Ambiences 11 Long Ambience" "5 Ambiences 12 Clear Ambience" "5 Ambiences 13 Heavy Ambience" "5 Ambiences 14 Bass XXL" "5 Ambiences 15 Percussion Air" "6 Spaces 01 North Church" "6 Spaces 02 East Church" "6 Spaces 03 South Church" "6 Spaces 04 West Church" "6 Spaces 05 Cinema Room" "6 Spaces 06 Scoring Stage" "6 Spaces 07 Bath House" "6 Spaces 08 Car Park" "6 Spaces 09 Arena" "6 Spaces 10 Redwood Valley" "6 Spaces 11 Tanglewood" "6 Spaces 12 Academy Yard" "6 Spaces 13 Hillside" "6 Spaces 14 Cavern" "6 Spaces 15 Stone Quarry" "6 Spaces 16 Europa" "6 Spaces 17 Gated Space"
 		  )))
-    (make <screen> #:width 900);;(ScreenSize #:width 950) ;;per farlo in rapporto aureo
+    (make <screen> #:width 900)
     (GenerateVerticalLogSlider "inputdB" "Volume In" 50 100 80 400 "Log in volume" "VolumeInID" "Sono input log")
     (GenerateVerticalLogSlider "outputdB" "Volume out" 800 100 80 400  "Log out volume" "VolumeOutID" "Sono output log")
     (GenerateBypassToggle 50 590)
@@ -1523,7 +1462,7 @@ var id var))
 ;;Se vuoi generare una FFT
 (define (YASimpleFFT-interface-definitions dst-folder new-name)
   ;;
-  (make <screen> #:width 900);;(ScreenSize #:width 950) ;;per farlo in rapporto aureo
+  (make <screen> #:width 900)
   (GenerateVerticalLogSlider "inputdB" "Volume In"    50 70 80 400 "Log in volume" "VolumeInID" "Sono input log")
   (GenerateVerticalLogSlider "outputdB" "Volume out" 800 70 80 400  "Log out volume" "VolumeOutID" "Sono output log")
   (GenerateBypassToggle 50 590)
@@ -1542,7 +1481,7 @@ var id var))
   (GenerateBackground 57))
 
 (define (YASoundEnhancer-interface-definitions dst-folder new-name)
-  (make <screen> #:width 900);;(ScreenSize #:width 800) 
+  (make <screen> #:width 900)
   (GenerateVerticalLogSlider "inputdB" "Volume In" 50 100 80 400 "Log in volume" "VolumeInID" "Sono input log")
   (GenerateVerticalLogSlider "outputdB" "Volume out" 800 100 80 400  "Log out volume" "VolumeOutID" "Sono output log")
   (GenerateBypassToggle 50 590)

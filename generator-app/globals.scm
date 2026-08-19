@@ -158,54 +158,6 @@
     IMAGE_RESOURCES
     ))
 ;;
-;; (define-public *INTERFACE* "")
-;; (define-public *INTERFACE::START* "///[ \t]*INTERFACE START")
-;; (define-public *INTERFACE::END* "///[ \t]*INTERFACE END")
-;; ;;
-;; (define-public *GRIDONOFF* "")
-;; (define-public *GRIDONOFF::START* "///[ \t]*GRIDONOFF START")
-;; (define-public *GRIDONOFF::END* "///[ \t]*GRIDONOFF END")
-;; ;;
-;; (define-public *GRID* "")
-;; (define-public *GRID::START* "///[ \t]*GRID START")
-;; (define-public *GRID::END* "///[ \t]*GRID END")
-;; ;;
-;; (define-public *RESIZED* "")
-;; (define-public *RESIZED::START* "///[ \t]*RESIZED START")
-;; (define-public *RESIZED::END* "///[ \t]*RESIZED END")
-;; ;;
-;; (define-public *DECLARATIONS* "")
-;; (define-public *DECLARATIONS::START* "///[ \t]*DECLARATIONS START")
-;; (define-public *DECLARATIONS::END* "///[ \t]*DECLARATIONS END")
-;; ;;
-;; (define-public *PARAMS* "")
-;; (define-public *PARAMS::START* "///[ \t]*PARAMS START")
-;; (define-public *PARAMS::END* "///[ \t]*PARAMS END")
-;; ;;
-;; (define-public *DPARAMS* "")
-;; (define-public *DPARAMS::START* "///[ \t]*DPARAMS START")
-;; (define-public *DPARAMS::END* "///[ \t]*DPARAMS END")
-;; ;;
-;; (define-public *GETPARAMS* "")
-;; (define-public *GETPARAMS::START* "///[ \t]*GETPARAMS START")
-;; (define-public *GETPARAMS::END* "///[ \t]*GETPARAMS END")
-;; ;;
-;; (define-public *VALUEPARAMS* "")
-;; (define-public *VALUEPARAMS::START* "///[ \t]*VALUEPARAMS START")
-;; (define-public *VALUEPARAMS::END* "///[ \t]*VALUEPARAMS END")
-;; ;;
-;; (define-public *SCREENSIZE* "")
-;; (define-public *SCREENSIZE::START* "///[ \t]*SCREENSIZE START")
-;; (define-public *SCREENSIZE::END* "///[ \t]*SCREENSIZE END")
-;; ;;
-;; (define-public *DESTROY* "")
-;; (define-public *DESTROY::START* "///[ \t]*DESTROY START")
-;; (define-public *DESTROY::END* "///[ \t]*DESTROY END")
-;; ;;
-;; (define-public *BACKGROUND* "")
-;; (define-public *BACKGROUND::START* "///[ \t]*BACKGROUND START")
-;; (define-public *BACKGROUND::END* "///[ \t]*BACKGROUND END")
-;; ;;
 ;; (define-public *OVERSAMPLING_PPC* "")
 ;; (define-public *OVERSAMPLING_PPC::START* "///[ \t]*OVERSAMPLING_PPC START")
 ;; (define-public *OVERSAMPLING_PPC::END* "///[ \t]*OVERSAMPLING_PPC END")
@@ -222,27 +174,11 @@
 ;; (define-public *OVERSAMPLING_PPH::START* "///[ \t]*OVERSAMPLING_PPH START")
 ;; (define-public *OVERSAMPLING_PPH::END* "///[ \t]*OVERSAMPLING_PPH END")
 ;; ;;
-;; (define-public *WETDRY_PPC_PREFIX* "")
-;; (define-public *WETDRY_PPC_POSTFIX* "")
-;; (define-public *WETDRY_PPC_PREFIX::START*  "///[ \t]*WETDRY_PPC_PREFIX START")
-;; (define-public *WETDRY_PPC_POSTFIX::START* "///[ \t]*WETDRY_PPC_POSTFIX START")
-;; (define-public *WETDRY_PPC_PREFIX::END*    "///[ \t]*WETDRY_PPC_PREFIX END")
-;; (define-public *WETDRY_PPC_POSTFIX::END*   "///[ \t]*WETDRY_PPC_POSTFIX END")
-;; ;;
-;; (define-public *SYNTH_H_RP* "")
-;; (define-public *SYNTH_H_RP::START* "///[ \t]*SYNTH_H_RP START")
-;; (define-public *SYNTH_H_RP::END* "///[ \t]*SYNTH_H_RP END")
-;;
 ;;Altre definizioni
 (define-public *OVERSAMPLING-ENABLED* #f)
 (define-public *OVERSAMPLING-FILTER* 'filterHalfBandPolyphaseIIR)
 (define-public *OVERSAMPLING-isMaxQuality* #f)
 (define-public *OVERSAMPLING-useIntegerLatency* #t)
-;;
-;;la struttura per gestire il layout
-;; (define-public layout-data-grid '())
-;; (define-public layout-data-components '())
-
 (define-public *components* '())
 (define-public *image-sets* '())
 (define-public *screen* #f)

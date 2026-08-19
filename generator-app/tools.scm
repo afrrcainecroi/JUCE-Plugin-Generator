@@ -364,18 +364,6 @@
 	 (fou (replace-in-string fin "pluginCode=\"Ylst\"" (format #f "pluginCode=\"~a\"" uuid))))
     (fs-io-from-string new-name fou)))
 ;;
-;;per sostituire in un file la sottostringa compresa tra due estremi
-;; (define-public (replace-between-flags file start-flag end-flag new-text)
-;;   (let* ((content (call-with-input-file file get-string-all))
-;;          (pattern (string-append start-flag "(.|\n)*" end-flag))
-;; 	 ;;Nel replacement, a startflag e endflag devo togliere il patterm matching  [ \n]*
-;;          (replacement (string-append "///" (substring start-flag 8) "\n" new-text "\n" "\t///" (substring end-flag 8)))
-;;          (new-content (regexp-substitute/global #f
-;; 						pattern content 'pre replacement 'post)))
-;;     ;; (when (string=? start-flag WETDRY_PPC_PREFIX::START)
-;;     ;;   (Show! new-content ))
-;;     (call-with-output-file file
-;;       (lambda (port) (display new-content port)))))
 (define (clean-flag flag)
   (let ((pos (string-contains flag "]*")))
     (if pos
