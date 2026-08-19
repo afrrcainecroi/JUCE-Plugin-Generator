@@ -628,22 +628,60 @@
   #:code
   #t)
 
-;;Old classes
-;;Lo schermo. Genera le configurazioni dello schermo , compresa la presenza o meno della griglia
-(new-class <screen>
-	   ((ratio (/ (+ 1.0 (sqrt 5.0)) 2.0)) ; Diventerà #:init-form
-	    (width 800)			; Diventerà #:init-value
-	    (rows 15)			; Diventerà #:init-value
+
+(define-public (register-grid! grid)
+  (when *grid*
+    (error "Only one grid may be declared"))
+
+  (set! *grid*
+        `((rows      . ,(grid:rows grid))
+          (cols      . ,(grid:cols grid))
+          (show-grid . ,(grid:show-grid grid))))
+
+  *grid*)
+
+(define-public (register-screen! screen)
+  (when *screen*
+    (error "Only one screen may be declared"))
+
+  (set! *screen*
+        `((ratio . ,(screen:ratio screen))
+          (width . ,(screen:width screen))))
+
+  *screen*)
+
+
+(new-class <grid>
+	   ()
+	   ((rows 15)
 	    (cols 24)
-	    (show-grid #t))		; Diventerà #:init-value
+	    (show-grid #t))
 	   #:code
-	   (begin
-	     (GenerateAssignements *SCREENSIZE*
-				   (screenRatio ratio)
-				   (standardScreenWidth width)
-				   (standardScreenHeight "standardScreenWidth / screenRatio"))
-	     ;; (AppendStringTo *GRIDONOFF* (string-append "bool drawDebugGrid = " (if show-grid "true;\n" "false;\n")))
-	     (set! layout-data-grid `(("rows" . ,rows)("cols" . ,cols)))))
+	   (register-grid! this))
+
+(new-class <screen>
+	   ()
+	   ((ratio (/ (+ 1.0 (sqrt 5.0)) 2.0))
+	    (width 800))
+	   #:code
+	   (register-screen! this))
+
+;; ;;Old classes
+;; ;;Lo schermo. Genera le configurazioni dello schermo , compresa la presenza o meno della griglia
+;; (new-class <screen>
+;; 	   ((ratio (/ (+ 1.0 (sqrt 5.0)) 2.0)) ; Diventerà #:init-form
+;; 	    (width 800)			; Diventerà #:init-value
+;; 	    (rows 15)			; Diventerà #:init-value
+;; 	    (cols 24)
+;; 	    (show-grid #t))		; Diventerà #:init-value
+;; 	   #:code
+;; 	   (begin
+;; 	     (GenerateAssignements *SCREENSIZE*
+;; 				   (screenRatio ratio)
+;; 				   (standardScreenWidth width)
+;; 				   (standardScreenHeight "standardScreenWidth / screenRatio"))
+;; 	     ;; (AppendStringTo *GRIDONOFF* (string-append "bool drawDebugGrid = " (if show-grid "true;\n" "false;\n")))
+;; 	     (set! layout-data-grid `(("rows" . ,rows)("cols" . ,cols)))))
 
 ;; header e footer
 (new-class <header-footer>

@@ -245,11 +245,14 @@
 
 (define-public *components* '())
 (define-public *image-sets* '())
-
+(define-public *screen* #f)
+(define-public *grid* #f)
 
 (define-public (reset-components!)
   (set! *components* '())
   (set! *image-sets* '())
+  (set! *screen* #f)
+  (set! *grid* #f)
   #t)
 ;; (define-public (find-component id)
 ;;   (find

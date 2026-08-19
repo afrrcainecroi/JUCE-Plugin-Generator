@@ -267,9 +267,15 @@
     (replace-between-flags PluginProcessor.cpp *WETDRY_PPC_POSTFIX::START* *WETDRY_PPC_POSTFIX::END* *WETDRY_PPC_POSTFIX*)
     ;;
     ;;In base al contenuto di layout-data, aggiorna *GRID*
-    (when (null? layout-data-grid) ;; scritto come (("columns" . 24) ("rows" . 15))
+    ;; (when (null? layout-data-grid) ;; scritto come (("columns" . 24) ("rows" . 15))
+    ;;   (Show! "<grid> has to be defined!!")
+    ;;   (exit EXIT_FAILURE))
+    (when (not *grid*)
       (Show! "<grid> has to be defined!!")
       (exit EXIT_FAILURE))
+    (set! layout-data-grid
+      `(("rows" . ,(assoc-ref *grid* 'rows))
+        ("cols" . ,(assoc-ref *grid* 'cols))))
     ;;
     ;;Components,  scritto come #(
     ;;    (("colSpan" . 8) ("rowSpan" . 1) ("col" . 8) ("row" . 1) ("id" . "lblMainTitle"))
@@ -1563,20 +1569,22 @@ var id var))
 
 (define (NewGeneric-interface dst-folder new-name)
 
-  ;; ------------------------------------------------------------
-  ;; SCREEN
-  ;; ------------------------------------------------------------
-  (make <screen>
-    #:width 1000
-    #:rows 24
-    #:show-grid #t)
-  ;; ------------------------------------------------------------
-  ;; GLOBAL UI
-  ;; ------------------------------------------------------------
-  (make <palette>
-        #:id "Main Palette"
-        #:title-palette "Choose Theme"
-        #:enable #t)
+(make <screen>
+      #:ratio (/ (+ 1.0 (sqrt 5.0)) 2.0)
+      #:width 800)
+
+(make <grid>
+      #:rows 24
+      #:cols 24
+      #:show-grid #t)
+
+;; ------------------------------------------------------------
+;; GLOBAL UI
+;; ------------------------------------------------------------
+(make <palette>
+  #:id "Main Palette"
+  #:title-palette "Choose Theme"
+  #:enable #t)
 
   (make <header-footer>
         #:id "Main Header Footer")
