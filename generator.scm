@@ -1528,7 +1528,10 @@ var id var))
   #:enable #t)
 
   (make <header-footer>
-        #:id "Main Header Footer")
+        #:id "Main Header Footer"
+	#:font-size-header 72.0
+	#:row-span-header 3
+	)
 
 
   (make <image-set>
@@ -2059,19 +2062,48 @@ var id var))
 
 (define-public (hard-reload-project)
   (display "Svuotamento cache di Guile...\n")
-  ;; La chiamata di sistema garantisce che Guile non trovi i vecchi .go
+
+  ;; Evita che vengano riutilizzati vecchi .go
   (system "rm -rf ~/.cache/guile/ccache/*")
-  
+
   (display "Ricaricamento moduli...\n")
-  ;; È fondamentale rispettare l'ordine topologico: dalle foglie alla radice
-  (for-each (lambda (mod-name)
-              (let ((mod (resolve-module mod-name #f)))
-                (when mod
-                  (display (format #f "Ricaricamento di ~a in corso...\n" mod-name))
-                  (reload-module mod))))
-            '((generator-app globals)
-              (generator-app tools)
-              (generator-app genera-classi)
-              (generator-app code-generator)))
-  
+
+  ;; Ordine topologico: foglie -> moduli dipendenti -> facade.
+  (for-each
+   (lambda (mod-name)
+     (let ((mod (resolve-module mod-name #f)))
+       (when mod
+         (format #t "Ricaricamento di ~a in corso...\n" mod-name)
+         (reload-module mod))))
+
+   '((generator-app globals)
+     (generator-app tools)
+     (generator-app genera-classi)
+
+     ;; Generic GOOPS e stato
+     (generator-app generation-protocols)
+     (generator-app generation-state)
+
+     ;; DSL -> validation -> registration
+     (generator-app dsl-model)
+     (generator-app validation)
+     (generator-app registration)
+
+     ;; Generazione C++
+     (generator-app cpp-generation-common)
+     (generator-app cpp-generation)
+
+     ;; Sottosistemi indipendenti/finali
+     (generator-app resources)
+     (generator-app layout)
+     (generator-app dsp-generation)
+
+     ;; Wrapper degli emitter
+     (generator-app generation-orchestration)
+
+     ;; Facade: sempre ultima
+     (generator-app code-generator)))
+
   (display "Reload del progetto completato.\n"))
+
+

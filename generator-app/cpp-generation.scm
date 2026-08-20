@@ -199,7 +199,9 @@
 		var)
 	(scope-properties->cpp model)))
       ((header)
-       (let ((text (assoc-ref model 'text)))
+       (let ((text          (assoc-ref model 'text))
+	     (font-size     (assoc-ref model 'font-size))
+	     (justification (assoc-ref model 'justification)))
 	 (string-append
 	  (format #f
 		  "addAndMakeVisible(~a);~%"
@@ -209,11 +211,13 @@
 		  var
 		  (cpp-string text))
 	  (format #f
-		  "~a.setFont(juce::FontOptions(32.0f).withStyle(\"Bold\"));~%"
-		  var)
+		  "~a.setFont(juce::FontOptions(~af).withStyle(\"Bold\"));~%"
+		  var
+		  font-size)
 	  (format #f
-		  "~a.setJustificationType(juce::Justification::centred);~%"
-		  var)
+		  "~a.setJustificationType(~a);~%"
+		  var
+		  (justification->cpp justification))
 	  (format #f
 		  "~a.setColour(juce::Label::textColourId, kineticLNF.currentPalette.neonWhite);~%"
 		  var))))

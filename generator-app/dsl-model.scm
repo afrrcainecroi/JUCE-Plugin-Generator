@@ -23,6 +23,8 @@
 (new-class <label> (<component>)
 	   (
 	    (text "")
+	    (font-size 12.0)
+	    (font-style 'plain)
 	    (justification 'centred))
 	   #:code
 	   (register-component! this))
@@ -172,6 +174,8 @@
 	    (id "Main Header Footer")
 	    ;; Header
 	    (title-header "YAPlugin")
+	    (font-size-header 32.0)
+	    (font-style-header 'bold)
 	    (row-header 1)
 	    (col-header 8)
 	    (row-span-header 1)
@@ -201,12 +205,16 @@
                #:id
                (string-append base " Header")
                #:text title-header
+	       #:font-size font-size-header
+	       #:font-style font-style-header
                #:row row-header
                #:col col-header
                #:row-span row-span-header
                #:col-span col-span-header
                #:margin-tb margin-tb-header
-               #:margin-lr margin-lr-header)
+               #:margin-lr margin-lr-header
+	       #:justification 'centred
+	       )
 	     (make <footer>
                #:id
                (string-append base " Footer")
@@ -407,7 +415,9 @@
   (append
    (next-method)
    `((text          . ,(label:text c))
-     (justification . ,(label:justification c)))))
+     (justification . ,(label:justification c))
+     (font-size     . ,(label:font-size c))
+     )))
 
 (define-method (component->model (c <link>))
   (append
