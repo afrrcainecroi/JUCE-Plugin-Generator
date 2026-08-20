@@ -156,6 +156,7 @@
     PROCESS
     PAINT_OVER_CHILDREN
     IMAGE_RESOURCES
+    TIMER
     ))
 ;;
 ;; (define-public *OVERSAMPLING_PPC* "")

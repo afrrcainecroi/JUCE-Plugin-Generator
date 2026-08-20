@@ -118,22 +118,6 @@
 		var)
         (slider-scale->cpp model)
 	(slider-kinetic-properties->cpp model)))
-      ;; ((selector)
-      ;;  (let ((items
-      ;;         (assoc-ref model 'items))
-      ;; 	     (default-index
-      ;;          (assoc-ref model 'default-index)))
-      ;; 	 (string-append
-      ;; 	  (format #f
-      ;; 		  "addAndMakeVisible(~a);~%"
-      ;; 		  var)
-      ;; 	  (selector-items->cpp
-      ;; 	   var
-      ;; 	   items)
-      ;; 	  (format #f
-      ;; 		  "~a.setSelectedItemIndex(~a, juce::dontSendNotification);~%"
-      ;; 		  var
-      ;; 		  default-index))))
       ((text-button)
        (let ((text
               (assoc-ref model 'text)))
@@ -144,47 +128,52 @@
 	  (format #f
 		  "~a.setButtonText(\"~a\");~%"
 		  var
-		  (cpp-string text)))))
-      ((toggle-button switch bypass-switch)
-       (let ((text
-              (assoc-ref model 'text))
-	     (default-state
-               (assoc-ref model 'default-state))
-	     (style
-		 (assoc-ref model 'style))
-	     (tooltip
-              (assoc-ref model 'tooltip))
-	     (role
-	      (assoc-ref model 'role))
-	     )
-	 (string-append
-	  (format #f
-		  "addAndMakeVisible(~a);~%"
-		  var)
-	  (format #f
-		  "~a.setButtonText(\"~a\");~%"
-		  var
 		  (cpp-string text))
-	  (format #f
-		  "~a.setToggleState(~a, juce::dontSendNotification);~%"
-		  var
-		  (bool->cpp default-state))
-	  (if (memq role '(bypass dsp-bypass))
-	      (format #f
-		      "~a.onStateChange = [this] { repaint(); };~%"
-		      var)
-	      "")
-	  (if (eq? style 'switch)
-              (format #f
-                      "~a.getProperties().set(\"style\", \"switch\");~%"
-                      var)
-              "")
-	      (if (and tooltip
-             (not (string-null? tooltip)))
+	  (button-common-properties->cpp model)
+	  )))
+      ((toggle-button switch bypass-switch)
+ (let ((text
+        (assoc-ref model 'text))
+
+       (default-state
+        (assoc-ref model 'default-state))
+
+       (style
+        (assoc-ref model 'style))
+
+       (role
+        (assoc-ref model 'role)))
+
+   (string-append
+
+    (format #f
+            "addAndMakeVisible(~a);~%"
+            var)
+
+    (format #f
+            "~a.setButtonText(\"~a\");~%"
+            var
+            (cpp-string text))
+
+    (format #f
+            "~a.setToggleState(~a, juce::dontSendNotification);~%"
+            var
+            (bool->cpp default-state))
+
+    (button-common-properties->cpp model)
+
+    ;; Semantica specifica del TYPE/style switch.
+    (if (eq? style 'switch)
         (format #f
-                "~a.setTooltip(\"~a\");~%"
-                var
-                (cpp-string tooltip))
+                "~a.getProperties().set(\"style\", \"switch\");~%"
+                var)
+        "")
+
+    ;; Comportamento legato al ROLE, non alla grafica.
+    (if (memq role '(bypass dsp-bypass))
+        (format #f
+                "~a.onStateChange = [this] { repaint(); };~%"
+                var)
         ""))))
       ((meter)
        (string-append
@@ -198,107 +187,63 @@
 		"addAndMakeVisible(~a);~%"
 		var)
 	(scope-properties->cpp model)))
-      ((header)
-       (let ((text          (assoc-ref model 'text))
-	     (font-size     (assoc-ref model 'font-size))
-	     (justification (assoc-ref model 'justification)))
-	 (string-append
-	  (format #f
-		  "addAndMakeVisible(~a);~%"
-		  var)
-	  (format #f
-		  "~a.setText(\"~a\", juce::dontSendNotification);~%"
-		  var
-		  (cpp-string text))
-	  (format #f
-		  "~a.setFont(juce::FontOptions(~af).withStyle(\"Bold\"));~%"
-		  var
-		  font-size)
-	  (format #f
-		  "~a.setJustificationType(~a);~%"
-		  var
-		  (justification->cpp justification))
-	  (format #f
-		  "~a.setColour(juce::Label::textColourId, kineticLNF.currentPalette.neonWhite);~%"
-		  var))))
-      ((footer)
-       (let ((text (assoc-ref model 'text)))
-	 (string-append
-	  (format #f
-		  "addAndMakeVisible(~a);~%"
-		  var)
-	  (format #f
-		  "~a.setText(\"~a\", juce::dontSendNotification);~%"
-		  var
-		  (cpp-string text))
-	  (format #f
-		  "~a.setName(\"~a\");~%"
-		  var
-		  (cpp-string var))
-	  (format #f
-		  "~a.setFont(juce::FontOptions(12.0f));~%"
-		  var)
-	  (format #f
-		  "~a.setJustificationType(juce::Justification::bottomRight);~%"
-		  var)
-	  (format #f
-		  "~a.setColour(juce::Label::textColourId, juce::Colours::grey);~%"
-		  var))))
+      
+      ;; ----------------------------------------------------------
+      ;; LABEL-LIKE COMPONENTS
+      ;;
+      ;; Tutte le proprietà grafiche comuni vengono generate da
+      ;; label-properties->cpp:
+      ;;
+      ;;   text
+      ;;   font-size
+      ;;   font-style
+      ;;   justification
+      ;;   text-colour
+      ;;   minimum-horizontal-scale
+      ;;   tooltip
+      ;;
+      ;; Header e footer non hanno quindi più proprietà grafiche
+      ;; hardcoded nell'emitter.
+      ;; ----------------------------------------------------------
+
+      ((header footer label palette-label)
+       (label-properties->cpp model))
+
+      ;; ----------------------------------------------------------
+      ;; LINK
+      ;;
+      ;; Prima genera tutte le normali proprietà di un Label.
+      ;; Poi aggiunge esclusivamente il comportamento specifico
+      ;; del TYPE link.
+      ;; ----------------------------------------------------------
+
       ((link)
-       (let ((text (assoc-ref model 'text)))
-	 (string-append
-	  (format #f
-		  "addAndMakeVisible(~a);~%"
-		  var)
-	  (format #f
-		  "~a.setText(\"~a\", juce::dontSendNotification);~%"
-		  var
-		  (cpp-string text))
-	  (format #f
-		  "~a.setName(\"~a\");~%"
-		  var
-		  (cpp-string var))
-	  (format #f
-		  "~a.setFont(juce::FontOptions(12.0f));~%"
-		  var)
-	  (format #f
-		  "~a.setJustificationType(juce::Justification::bottomLeft);~%"
-		  var)
-	  (format #f
-		  "~a.setColour(juce::Label::textColourId, juce::Colours::grey);~%"
-		  var)
-	  (format #f
-		  "~a.setMinimumHorizontalScale(1.0f);~%"
-		  var)
-	  (format #f
-		  "~a.setMouseCursor(juce::MouseCursor::PointingHandCursor);~%"
-		  var)
-	  (format #f
-		  "~a.addMouseListener(this, false);~%"
-		  var))))
+       (string-append
+        (label-properties->cpp model)
+
+        ;; Il nome viene utilizzato anche dalla gestione
+        ;; dell'interazione mouse.
+        (format #f
+                "~a.setName(\"~a\");~%"
+                var
+                (cpp-string var))
+
+        ;; Comportamento visuale specifico di un link.
+        (format #f
+                "~a.setMouseCursor(juce::MouseCursor::PointingHandCursor);~%"
+                var)
+
+        ;; Il PluginEditor riceve gli eventi mouse del link.
+        (format #f
+                "~a.addMouseListener(this, false);~%"
+                var)))
+      
       ((selector)
        (selector-constructor-code model))
       ((palette-selector)
        (string-append
         (selector-constructor-code model)
         (palette-selector-callback->cpp model)))
-      ((label palette-label)
-       (let ((text
-              (assoc-ref model 'text))
-	     (justification
-              (assoc-ref model 'justification)))
-	 (string-append
-	  (format #f
-		  "addAndMakeVisible(~a);~%"
-		  var)
-	  (format #f
-		  "~a.setText(\"~a\", juce::dontSendNotification);~%"
-		  var
-		  (cpp-string text))
-	  (format #f
-		  "~a.setJustificationType(~a);~%"
-		  var
-		  (justification->cpp justification)))))
       (else ""))))
 
 (define-method (model->attachment-declaration (model <list>))

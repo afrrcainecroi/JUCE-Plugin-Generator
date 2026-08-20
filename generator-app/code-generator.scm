@@ -75,7 +75,6 @@
                toggle-button:style
                toggle-button:parameter-id
                toggle-button:parameter-name
-               toggle-button:tooltip
                toggle-button:processor-reference
                toggle-button:version-hint
                <normal-toggle-button>
@@ -184,7 +183,9 @@
                generate-process-code
                generate-process-wetdry-prefix
                generate-paint-over-children-code
-               generate-member-declarations
+	       generate-footer-timer-code
+	       generate-timer-code
+	       generate-member-declarations
                generate-constructor-code
                generate-attachment-declarations
                generate-attachment-code
@@ -192,7 +193,11 @@
                generate-dparams-code
                generate-getparams-code
                generate-valueparams-code
-               generate-destroy-code)
+               generate-destroy-code
+	       generate-footer-timer-code
+	       generate-timer-code
+
+	       )
   )
 
 ;; (define-method (model->attachment-code (model <list>))

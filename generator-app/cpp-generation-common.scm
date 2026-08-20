@@ -14,7 +14,9 @@
             tick-labels->cpp
             cpp-string
             justification->cpp
-            selector-items->cpp))
+            selector-items->cpp
+	    font-style->cpp
+	    ))
 
 (define (error message . args)
   (scm-error 'misc-error
@@ -235,7 +237,7 @@
             var
             var)))
 
-(define (selector-constructor-code model)
+(define-public (selector-constructor-code model)
   (let ((var
          (assoc-ref model 'var))
         (items
@@ -252,7 +254,9 @@
      (format #f
              "~a.setSelectedId(~a);~%"
              var
-             default-index))))
+             default-index)
+     (selector-common-properties->cpp model)
+     )))
 
 (define-public (slider-scale->cpp model)
   (let ((scale (assoc-ref model 'scale))
@@ -422,21 +426,20 @@
      s)
     (get-output-string out)))
 
-(define (justification->cpp justification)
+(define-public (justification->cpp justification)
   (case justification
-    ((centred)
-     "juce::Justification::centred")
-    ((centred-left)
-     "juce::Justification::centredLeft")
-    ((centred-right)
-     "juce::Justification::centredRight")
-    ((left)
-     "juce::Justification::left")
-    ((right)
-     "juce::Justification::right")
+    ((centred)        "juce::Justification::centred")
+    ((centred-left)   "juce::Justification::centredLeft")
+    ((centred-right)  "juce::Justification::centredRight")
+    ((left)           "juce::Justification::left")
+    ((right)          "juce::Justification::right")
+    ((top-left)       "juce::Justification::topLeft")
+    ((top-right)      "juce::Justification::topRight")
+    ((bottom-left)    "juce::Justification::bottomLeft")
+    ((bottom-right)   "juce::Justification::bottomRight")
     (else
-     (error "Invalid label justification"
-            justification))))
+     (error "Invalid label justification" justification))))
+
 
 (define-public (selector-items->cpp var items)
   (apply
@@ -450,3 +453,135 @@
               index))
     items
     (iota (length items) 1))))
+
+(define-public (font-style->cpp style)
+  (case style
+    ((plain)  "")
+    ((bold)   ".withStyle(\"Bold\")")
+    ((italic) ".withStyle(\"Italic\")")
+    (else
+     (error "Invalid label font style" style))))
+
+(define-public (label-colour->cpp colour)
+  (case colour
+    ((default)    #f)
+    ((grey)       "juce::Colours::grey")
+    ((white)      "juce::Colours::white")
+    ((black)      "juce::Colours::black")
+    ((neon-white) "kineticLNF.currentPalette.neonWhite")
+    (else
+     (error "Invalid label text colour" colour))))
+
+(define-public (label-properties->cpp model)
+  (let* ((var           (assoc-ref model 'var))
+         (text          (assoc-ref model 'text))
+         (font-size     (assoc-ref model 'font-size))
+         (font-style    (assoc-ref model 'font-style))
+         (justification (assoc-ref model 'justification))
+         (text-colour   (assoc-ref model 'text-colour))
+         (min-scale     (assoc-ref model 'minimum-horizontal-scale))
+         (tooltip       (assoc-ref model 'tooltip))
+         (colour-cpp    (label-colour->cpp text-colour)))
+    (string-append
+     (format #f
+             "addAndMakeVisible(~a);~%"
+             var)
+
+     (format #f
+             "~a.setText(\"~a\", juce::dontSendNotification);~%"
+             var
+             (cpp-string text))
+
+     (format #f
+             "~a.setFont(juce::FontOptions(~af)~a);~%"
+             var
+             font-size
+             (font-style->cpp font-style))
+
+     (format #f
+             "~a.setJustificationType(~a);~%"
+             var
+             (justification->cpp justification))
+
+     (if colour-cpp
+         (format #f
+                 "~a.setColour(juce::Label::textColourId, ~a);~%"
+                 var
+                 colour-cpp)
+         "")
+
+     (format #f
+             "~a.setMinimumHorizontalScale(~af);~%"
+             var
+             min-scale)
+
+     (if (and tooltip
+              (not (string-null? tooltip)))
+         (format #f
+                 "~a.setTooltip(\"~a\");~%"
+                 var
+                 (cpp-string tooltip))
+         ""))))
+
+(define-public (button-common-properties->cpp model)
+  (let ((var     (assoc-ref model 'var))
+        (tooltip (assoc-ref model 'tooltip))
+        (enabled (assoc-ref model 'enabled)))
+    (string-append
+     (format #f
+             "~a.setEnabled(~a);~%"
+             var
+             (bool->cpp enabled))
+
+     (if (and tooltip
+              (not (string-null? tooltip)))
+         (format #f
+                 "~a.setTooltip(\"~a\");~%"
+                 var
+                 (cpp-string tooltip))
+         ""))))
+
+(define-public (selector-common-properties->cpp model)
+  (let ((var              (assoc-ref model 'var))
+        (justification    (assoc-ref model 'justification))
+        (tooltip          (assoc-ref model 'tooltip))
+        (enabled          (assoc-ref model 'enabled))
+        (nothing-text     (assoc-ref model 'text-when-nothing-selected))
+        (no-choices-text  (assoc-ref model 'text-when-no-choices)))
+    (string-append
+
+     (format #f
+             "~a.setJustificationType(~a);~%"
+             var
+             (justification->cpp justification))
+
+     (format #f
+             "~a.setEnabled(~a);~%"
+             var
+             (bool->cpp enabled))
+
+     (if (and nothing-text
+              (not (string-null? nothing-text)))
+         (format #f
+                 "~a.setTextWhenNothingSelected(\"~a\");~%"
+                 var
+                 (cpp-string nothing-text))
+         "")
+
+     (if (and no-choices-text
+              (not (string-null? no-choices-text)))
+         (format #f
+                 "~a.setTextWhenNoChoicesAvailable(\"~a\");~%"
+                 var
+                 (cpp-string no-choices-text))
+         "")
+
+     (if (and tooltip
+              (not (string-null? tooltip)))
+         (format #f
+                 "~a.setTooltip(\"~a\");~%"
+                 var
+                 (cpp-string tooltip))
+         ""))))
+
+

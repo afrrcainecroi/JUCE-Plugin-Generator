@@ -2,7 +2,10 @@
   #:use-module (oop goops)
   #:use-module (generator-app genera-classi)
   #:use-module (generator-app generation-protocols)
-  #:re-export (component-type component->model))
+  #:re-export (
+	       component-type
+	       component->model
+	       ))
 
 (new-class <component>
 	   (
@@ -25,20 +28,34 @@
 	    (text "")
 	    (font-size 12.0)
 	    (font-style 'plain)
-	    (justification 'centred))
+	    (justification 'centred)
+	    (text-colour 'default)
+	    (minimum-horizontal-scale 0.7)
+	    (tooltip "")
+	    )
 	   #:code
 	   (register-component! this))
 
 (new-class <selector> (<component>)
 	   (
 	    (items '())
-	    (default-index 0))
+	    (default-index 0)
+	    (justification 'centred-left)
+	    (tooltip "")
+	    (enabled #t)
+
+	    (text-when-nothing-selected "")
+	    (text-when-no-choices "No choices")
+	    )
 	   #:code
 	   (register-component! this))
 
 (new-class <button> (<component>)
 	   (
-	    (text ""))
+	    (text "")
+	    (tooltip "")
+	    (enabled #t)
+	    )
 	   #:code
 	   #t)
 
@@ -56,7 +73,6 @@
 	    ;; binding DAW/APVTS
 	    (parameter-id #f)
 	    (parameter-name #f)
-	    (tooltip "")
 	    (processor-reference #f)
 	    (version-hint 1))
 	   #:code
@@ -169,73 +185,106 @@
 
 ;; header e footer
 (new-class <header-footer>
-	   (
-	    ;; Identificatore logico del composito
-	    (id "Main Header Footer")
-	    ;; Header
-	    (title-header "YAPlugin")
-	    (font-size-header 32.0)
-	    (font-style-header 'bold)
-	    (row-header 1)
-	    (col-header 8)
-	    (row-span-header 1)
-	    (col-span-header 8)
-	    (margin-tb-header 0)
-	    (margin-lr-header 0)
-	    ;; Footer
-	    (title-footer "Copyright (c) 2025 AF-Audio")
-	    (row-footer 15)
-	    (col-footer 20)
-	    (row-span-footer 1)
-	    (col-span-footer 4)
-	    (margin-tb-footer 12)
-	    (margin-lr-footer 0)
-	    ;; Link
-	    (title-link "https://www.aacf-music.eu/")
-	    (url-link "https://www.aacf-music.eu/")
-	    (row-link 15)
-	    (col-link 1)
-	    (row-span-link 1)
-	    (col-span-link 5)
-	    (margin-tb-link 0)
-	    (margin-lr-link 0))
-	   #:code
-	   (let ((base id))
-	     (make <header>
-               #:id
-               (string-append base " Header")
-               #:text title-header
-	       #:font-size font-size-header
-	       #:font-style font-style-header
-               #:row row-header
-               #:col col-header
-               #:row-span row-span-header
-               #:col-span col-span-header
-               #:margin-tb margin-tb-header
-               #:margin-lr margin-lr-header
-	       #:justification 'centred
-	       )
-	     (make <footer>
-               #:id
-               (string-append base " Footer")
-               #:text title-footer
-               #:row row-footer
-               #:col col-footer
-               #:row-span row-span-footer
-               #:col-span col-span-footer
-               #:margin-tb margin-tb-footer
-               #:margin-lr margin-lr-footer)
-	     (make <link>
-               #:id
-               (string-append base " Link")
-               #:text title-link
-               #:url url-link
-               #:row row-link
-               #:col col-link
-               #:row-span row-span-link
-               #:col-span col-span-link
-               #:margin-tb margin-tb-link
-               #:margin-lr margin-lr-link)))
+  (
+   (id "Main Header Footer")
+
+   ;; HEADER
+   (title-header "YAPlugin")
+   (font-size-header 32.0)
+   (font-style-header 'bold)
+   (justification-header 'centred)
+   (text-colour-header 'neon-white)
+   (minimum-horizontal-scale-header 0.7)
+   (tooltip-header "")
+   (row-header 1)
+   (col-header 8)
+   (row-span-header 1)
+   (col-span-header 8)
+   (margin-tb-header 0)
+   (margin-lr-header 0)
+
+   ;; FOOTER
+   (title-footer "Copyright (c) 2025 AF-Audio")
+   (font-size-footer 12.0)
+   (font-style-footer 'plain)
+   (justification-footer 'bottom-right)
+   (text-colour-footer 'grey)
+   (minimum-horizontal-scale-footer 0.7)
+   (tooltip-footer "")
+   (row-footer 15)
+   (col-footer 20)
+   (row-span-footer 1)
+   (col-span-footer 4)
+   (margin-tb-footer 12)
+   (margin-lr-footer 0)
+
+   ;; LINK
+   (title-link "https://www.aacf-music.eu/")
+   (url-link "https://www.aacf-music.eu/")
+   (font-size-link 12.0)
+   (font-style-link 'plain)
+   (justification-link 'bottom-left)
+   (text-colour-link 'grey)
+   (minimum-horizontal-scale-link 1.0)
+   (tooltip-link "")
+   (row-link 15)
+   (col-link 1)
+   (row-span-link 1)
+   (col-span-link 5)
+   (margin-tb-link 0)
+   (margin-lr-link 0))
+
+  #:code
+  (let ((base id))
+
+    (make <header>
+      #:id (string-append base " Header")
+      #:text title-header
+      #:font-size font-size-header
+      #:font-style font-style-header
+      #:justification justification-header
+      #:text-colour text-colour-header
+      #:minimum-horizontal-scale minimum-horizontal-scale-header
+      #:tooltip tooltip-header
+      #:row row-header
+      #:col col-header
+      #:row-span row-span-header
+      #:col-span col-span-header
+      #:margin-tb margin-tb-header
+      #:margin-lr margin-lr-header)
+
+    (make <footer>
+      #:id (string-append base " Footer")
+      #:text title-footer
+      #:font-size font-size-footer
+      #:font-style font-style-footer
+      #:justification justification-footer
+      #:text-colour text-colour-footer
+      #:minimum-horizontal-scale minimum-horizontal-scale-footer
+      #:tooltip tooltip-footer
+      #:row row-footer
+      #:col col-footer
+      #:row-span row-span-footer
+      #:col-span col-span-footer
+      #:margin-tb margin-tb-footer
+      #:margin-lr margin-lr-footer)
+
+    (make <link>
+      #:id (string-append base " Link")
+      #:text title-link
+      #:url url-link
+      #:font-size font-size-link
+      #:font-style font-style-link
+      #:justification justification-link
+      #:text-colour text-colour-link
+      #:minimum-horizontal-scale minimum-horizontal-scale-link
+      #:tooltip tooltip-link
+      #:row row-link
+      #:col col-link
+      #:row-span row-span-link
+      #:col-span col-span-link
+      #:margin-tb margin-tb-link
+      #:margin-lr margin-lr-link)))
 
 (define *kinetic-palettes*
   '("Cyan (Cyberpunk)"
@@ -398,7 +447,10 @@
 (define-method (component->model (b <button>))
   (append
    (next-method)
-   `((text . ,(button:text b)))))
+   `((text . ,(button:text b))
+     (tooltip . ,(button:tooltip b))
+     (enabled . ,(button:enabled b))
+     )))
 
 (define-method (component->model (b <toggle-button>))
   (append
@@ -409,7 +461,7 @@
      (parameter-name      . ,(toggle-button:parameter-name b))
      (processor-reference . ,(toggle-button:processor-reference b))
      (version-hint        . ,(toggle-button:version-hint b))
-     (tooltip             . ,(toggle-button:tooltip b)))))
+     )))
 
 (define-method (component->model (c <label>))
   (append
@@ -417,6 +469,10 @@
    `((text          . ,(label:text c))
      (justification . ,(label:justification c))
      (font-size     . ,(label:font-size c))
+     (font-style    . ,(label:font-style c))
+     (text-colour              . ,(label:text-colour c))
+     (minimum-horizontal-scale . ,(label:minimum-horizontal-scale c))
+     (tooltip                  . ,(label:tooltip c))
      )))
 
 (define-method (component->model (c <link>))
@@ -434,7 +490,13 @@
   (append
    (next-method)
    `((items         . ,(selector:items c))
-     (default-index . ,(selector:default-index c)))))
+     (default-index . ,(selector:default-index c))
+     (justification               . ,(selector:justification c))
+     (tooltip                     . ,(selector:tooltip c))
+     (enabled                     . ,(selector:enabled c))
+     (text-when-nothing-selected  . ,(selector:text-when-nothing-selected c))
+     (text-when-no-choices        . ,(selector:text-when-no-choices c))
+     )))
 
 (define-method (component->model (s <slider>))
   (append
@@ -488,8 +550,6 @@
    `((grid-style      . ,(scope:grid-style s))
      (is-sharp        . ,(scope:is-sharp s))
      (glow-multiplier . ,(scope:glow-multiplier s)))))
-
-
 
 
 ;; ======================================================================

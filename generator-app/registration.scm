@@ -9,7 +9,8 @@
   #:re-export (register-component!)
   #:export (find-component
             find-component-by-role
-            component-id-used?
+	    find-component-by-type
+	    component-id-used?
             component-role-used?
             validate-component-role
             role-present?
@@ -65,6 +66,12 @@
   (find
    (lambda (component)
      (equal? (assoc-ref component 'role) role))
+   (generation-components)))
+
+(define (find-component-by-type type)
+  (find
+   (lambda (component)
+     (equal? (assoc-ref component 'type) type))
    (generation-components)))
 
 (define (component-role-used? role)
