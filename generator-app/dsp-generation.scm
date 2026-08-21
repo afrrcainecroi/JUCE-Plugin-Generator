@@ -6,6 +6,7 @@
             generate-paint-over-children-code
 	    generate-footer-timer-code
 	    generate-timer-code
+	    generate-dsp-runtime-members-code
 	    ))
 
 (define-public (generate-process-code)
@@ -390,3 +391,26 @@
     ap.scopeWriteIdx.load(std::memory_order_relaxed));~%"
                  (assoc-ref model 'var))
          ""))))
+
+
+(define-public (generate-dsp-runtime-members-code)
+  (string-append
+
+   (let ((model (role-model 'input-meter)))
+     (if model
+         (format #f
+                 "std::atomic<float> ~a { 0.0f };~%"
+                 (meter-peak-var model))
+         ""))
+
+   (let ((model (role-model 'output-meter)))
+     (if model
+         (format #f
+                 "std::atomic<float> ~a { 0.0f };~%"
+                 (meter-peak-var model))
+         ""))
+
+   (if (role-model 'scope)
+       (format #f
+               "std::array<std::atomic<float>, 128> scopeFifo {};~%std::atomic<int> scopeWriteIdx { 0 };~%")
+       "")))

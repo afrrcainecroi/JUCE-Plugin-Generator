@@ -196,7 +196,7 @@
                generate-destroy-code
 	       generate-footer-timer-code
 	       generate-timer-code
-
+	       generate-dsp-runtime-members-code
 	       )
   )
 

@@ -157,6 +157,7 @@
     PAINT_OVER_CHILDREN
     IMAGE_RESOURCES
     TIMER
+    DSP_RUNTIME_MEMBERS
     ))
 ;;
 ;; (define-public *OVERSAMPLING_PPC* "")

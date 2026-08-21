@@ -163,6 +163,10 @@
                   "\n"
                   (generate-timer-code))
 
+  (AppendStringTo  *DSP_RUNTIME_MEMBERS*
+		   "\n"
+		   (generate-dsp-runtime-members-code))
+
   ;;
   ;;Genera i codici c++ per PluginEditor.cpp
   (let ((PluginEditor.cpp (string-append dst-folder "/Source/" "PluginEditor.cpp"))
@@ -260,7 +264,8 @@
     (replace-between-flags PluginProcessor.cpp *OVERSAMPLING_PPCPB::START* *OVERSAMPLING_PPCPB::END* *OVERSAMPLING_PPCPB*)
     (replace-between-flags PluginProcessor.cpp *OVERSAMPLING_PPCRR::START* *OVERSAMPLING_PPCRR::END* *OVERSAMPLING_PPCRR*)
     (replace-between-flags PluginProcessor.h   *OVERSAMPLING_PPH::START* *OVERSAMPLING_PPH::END* *OVERSAMPLING_PPH*)
-					;e;
+    (replace-between-flags PluginProcessor.h   *DSP_RUNTIME_MEMBERS::START* *DSP_RUNTIME_MEMBERS::END* *DSP_RUNTIME_MEMBERS*)
+    ;;e;
     ;;La gestione del WET/DRY effettuata in automatico se uno slider è settato wet/DRY!
     (replace-between-flags PluginProcessor.cpp *WETDRY_PPC_PREFIX::START* *WETDRY_PPC_PREFIX::END* *WETDRY_PPC_PREFIX*)
     (replace-between-flags PluginProcessor.cpp *WETDRY_PPC_POSTFIX::START* *WETDRY_PPC_POSTFIX::END* *WETDRY_PPC_POSTFIX*)
@@ -1617,582 +1622,63 @@ var id var))
   #:row-span 1
   #:col-span 4)
 
-;; ;; ------------------------------------------------------------
-;; ;; GLOBAL UI
-;; ;; ------------------------------------------------------------
-;; (make <palette>
-;;   #:id "Main Palette"
-;;   #:title-palette "Choose Theme"
-;;   #:enable #t)
 
-;; (make <header-footer>
-;;   #:id "UI Property Test"
-
-;;   ;; HEADER: enorme, bold, a sinistra, bianco neon
-;;   #:title-header "HEADER: 48 BOLD LEFT"
-;;   #:font-size-header 48.0
-;;   #:font-style-header 'bold
-;;   #:justification-header 'centred-left
-;;   #:text-colour-header 'neon-white
-;;   #:minimum-horizontal-scale-header 1.0
-;;   #:tooltip-header "Tooltip HEADER"
-;;   #:row-header 1
-;;   #:col-header 2
-;;   #:row-span-header 3
-;;   #:col-span-header 20
-
-;;   ;; FOOTER: più piccolo, italic, a destra, grigio
-;;   #:title-footer "FOOTER: 22 ITALIC RIGHT"
-;;   #:font-size-footer 22.0
-;;   #:font-style-footer 'italic
-;;   #:justification-footer 'bottom-right
-;;   #:text-colour-footer 'grey
-;;   #:minimum-horizontal-scale-footer 0.8
-;;   #:tooltip-footer "Tooltip FOOTER"
-;;   #:row-footer 13
-;;   #:col-footer 10
-;;   #:row-span-footer 2
-;;   #:col-span-footer 13
-
-;;   ;; LINK: dimensione intermedia, sinistra, cursore mano
-;;   #:title-link "LINK: 18 PLAIN LEFT — CLICK ME"
-;;   #:url-link "https://www.aacf-music.eu/"
-;;   #:font-size-link 18.0
-;;   #:font-style-link 'plain
-;;   #:justification-link 'bottom-left
-;;   #:text-colour-link 'white
-;;   #:minimum-horizontal-scale-link 1.0
-;;   #:tooltip-link "Tooltip LINK"
-;;   #:row-link 13
-;;   #:col-link 1
-;;   #:row-span-link 2
-;;   #:col-span-link 8)
-
-
-;;   (make <image-set>
-;;       #:name "waveforms"
-;;       #:source-directory "/volume1/sources/NEW_DEVS/DEPLOYED/MUSIC/images/"
-;;       #:files '("1.png"
-;;                 "2.png"
-;;                 "3.png"
-;;                 "4.png"
-;; 		"5.png"
-;; 		"6.png"))
-
-;; (make <image-set>
-;;       #:name "waves"
-;;       #:source-directory "/volume1/sources/NEW_DEVS/DEPLOYED/MUSIC/images/"
-;;       #:files '("wave_sine.png"
-;;                 "wave_square.png"
-;;                 "wave_ramp.png"
-;;                 "wave_iramp.png"
-;;                 "wave_triangle.png"))
-
-;; ;; ============================================================
-;; ;; INPUT METER
-;; ;; ============================================================
-;; (make <meter>
-;;   #:id "Meter In"
-;;   #:role 'input-meter
-
-;;   #:style 'segmented
-;;   #:scale-type 'db
-;;   #:range-min -60.0
-;;   #:range-max 6.0
-;;   #:num-segments 24
-
-;;   #:row 4
-;;   #:col 1
-;;   #:row-span 8
-;;   #:col-span 3
-
-;;   #:margin-tb 8
-;;   #:margin-lr 6)
-
-;;   ;; ============================================================
-;;   ;; INPUT GAIN
-;;   ;; ============================================================
-;;   (make <linear-slider>
-;;         #:id "Input Gain"
-;;         #:role 'input-gain
-
-;;         #:parameter-id "inputGain"
-;;         #:parameter-name "Input Gain"
-;;         #:processor-reference "inputGain"
-;;         #:version-hint 1
-
-;;         #:title "INPUT"
-;;         #:min -60.0
-;;         #:max 12.0
-;;         #:default 0.0
-;;         #:interval 0.0
-;;         #:scale 'linear
-;;         #:value-type 'gain
-;;         #:suffix " dB"
-;;         #:orientation 'vertical
-
-;; 	#:show-ticks #t
-;; 	#:show-labels #t
-;; 	#:show-value #f
-
-;;         #:row 4
-;;         #:col 4
-;;         #:row-span 6
-;;         #:col-span 3
-
-;;         #:margin-tb 6
-;;         #:margin-lr 8)
-
-;;   ;; ============================================================
-;;   ;; CUTOFF
-;;   ;; ============================================================
-;;   ;; (make <rotary-slider>
-;;   ;;       #:id "Cutoff Frequency"
-
-;;   ;;       #:parameter-id "cutoff"
-;;   ;;       #:parameter-name "Cutoff"
-;;   ;;       #:processor-reference "cutoff"
-
-;;   ;;       #:title "CUTOFF"
-;;   ;;       ;; #:min 20.0
-;;   ;;       ;; #:max 20000.0
-;;   ;;       ;; #:default 1000.0
-;;   ;;       ;; #:scale 'logarithmic
-;;   ;;       ;; #:value-type 'freq
-;;   ;;       ;; #:suffix " Hz"
-	
-;;   ;; 	#:show-ticks #t
-;;   ;; 	#:show-labels #t
-;;   ;; 	#:tick-count 5
-;;   ;; 	;; #:tick-mode 'all
-;;   ;; 	;; #:tick-labels '("MIN" "25" "50" "75" "MAX")
-
-;;   ;; 	#:min 0.0
-;;   ;; 	#:max 5.0
-;;   ;; 	#:interval 1.0
-;;   ;; 	#:icon-set "waveforms"
-;;   ;; 	#:morph-icon #t
-
-	
-
-;;   ;;       #:row 4
-;;   ;;       #:col 7
-;;   ;;       #:row-span 4
-;;   ;;       #:col-span 4
-
-;;   ;;       #:margin-tb 6
-;;   ;;       #:margin-lr 8)
-
-;;   (make <rotary-slider>
-;;       #:id "Oversampling"
-
-;;       #:role 'oversampling
-
-;;       #:parameter-id "oversampling"
-;;       #:parameter-name "Oversampling"
-;;       #:processor-reference "oversampling"
-
-;;       #:title "OS"
-;;       #:min 0.0
-;;       #:max 3.0
-;;       #:default 0.0
-;;       #:interval 1.0
-;;       #:scale 'linear
-;;       #:value-type 'default
-;;       #:suffix "x"
-
-;;       #:show-value #t
-;;       #:show-ticks #t
-;;       #:show-labels #t
-;;       #:tick-count 4
-;;       #:tick-mode 'all
-;;       #:tick-labels '("1x" "2x" "4x" "8x")
-
-;;       #:row 4
-;;       #:col 7
-;;       #:row-span 4
-;;       #:col-span 4
-
-;;       #:margin-tb 6
-;;       #:margin-lr 8
-;; )
-
-;;   (make <rotary-slider>
-;;     #:id "Wet Dry"
-
-;;     #:role 'wet-dry
-
-;;     #:parameter-id "wetDry"
-;;     #:parameter-name "Wet Dry"
-;;     #:processor-reference "wetDry"
-
-;;     #:title "MIX"
-;;     #:min 0.0
-;;     #:max 100.0
-;;     #:default 100.0
-;;     #:interval 1.0
-;;     #:scale 'linear
-;;     #:value-type 'default
-;;     #:suffix "%"
-
-;;     #:show-value #t
-;;     #:show-ticks #t
-;;     #:show-labels #t
-;;     #:tick-count 5
-;;     #:tick-mode 'all
-;;     #:row 12
-;;     #:col 7
-;;     #:row-span 4
-;;     #:col-span 4
-
-;;     #:margin-tb 6
-;;     #:margin-lr 8)
-
-;;   ;; ============================================================
-;;   ;; SCOPE
-;;   ;; ============================================================
-;;   (make <scope>
-;;     #:id "Scope Visualizer"
-;;     #:role 'scope
-
-;;     #:grid-style 'default
-;;     #:glow-multiplier 1.0
-
-;;     #:row 5
-;;     #:col 11
-;;     #:row-span 5
-;;     #:col-span 7
-
-;;     #:margin-tb 8
-;;     #:margin-lr 8)
-
-;;   ;; ============================================================
-;;   ;; OUTPUT GAIN
-;;   ;; ============================================================
-;;   (make <linear-slider>
-;;         #:id "Output Gain"
-;;         #:role 'output-gain
-
-;;         #:parameter-id "outputGain"
-;;         #:parameter-name "Output Gain"
-;;         #:processor-reference "outputGain"
-;;         #:version-hint 1
-
-;;         #:title "OUTPUT"
-;;         #:min -60.0
-;;         #:max 12.0
-;;         #:default 0.0
-;;         #:interval 0.0
-;;         #:scale 'linear
-;;         #:value-type 'gain
-;;         #:suffix " dB"
-;;         #:orientation 'vertical
-
-;; 	;; #:show-ticks #t
-;; 	;; #:show-labels #f
-
-
-;;         #:row 4
-;;         #:col 18
-;;         #:row-span 6
-;;         #:col-span 3
-
-;;         #:margin-tb 6
-;;         #:margin-lr 8)
-
-;;   ;; ============================================================
-;;   ;; OUTPUT METER
-;;   ;; ============================================================
-;;   (make <meter>
-;;         #:id "Meter Out"
-;;         #:role 'output-meter
-
-;;         #:style 'segmented
-;;         #:scale-type 'db
-;;         #:range-min -60.0
-;;         #:range-max 6.0
-;;         #:num-segments 24
-
-;;         #:row 4
-;;         #:col 21
-;;         #:row-span 8
-;;         #:col-span 3
-
-;;         #:margin-tb 8
-;;         #:margin-lr 6)
-
-
-;;     ;; ============================================================
-;;   ;; PROPERTY TEST BENCH
-;;   ;; ============================================================
-
-;;   ;; ------------------------------------------------------------
-;;   ;; TEST 1 - GAIN FORMAT
-;;   ;; value-type, suffix, show-value, show-ticks, show-labels
-;;   ;; ------------------------------------------------------------
-;;   (make <rotary-slider>
-;;         #:id "Test Gain Rotary"
-
-;;         #:parameter-id "testGainRotary"
-;;         #:parameter-name "Test Gain Rotary"
-;;         #:processor-reference "testGainRotary"
-
-;;         #:title "GAIN"
-;;         #:min -60.0
-;;         #:max 12.0
-;;         #:default 0.0
-;;         #:interval 0.1
-;;         #:scale 'linear
-;;         #:value-type 'gain
-;;         #:suffix " dB"
-
-;;         #:show-value #t
-;;         #:show-ticks #t
-;;         #:show-labels #t
-;;         #:tick-count 5
-;;         #:tick-mode 'all
-
-;; 	#:icon-set "waves"
-;; 	#:morph-icon #t
-
-;;         #:row 16
-;;         #:col 1
-;;         #:row-span 4
-;;         #:col-span 8
-
-;;         #:margin-tb 6
-;;         #:margin-lr 8)
-
-;;   ;; ------------------------------------------------------------
-;;   ;; TEST 2 - FREQUENCY / LOG / ENDPOINTS
-;;   ;; value-type=freq, scale=logarithmic, tick-mode=endpoints
-;;   ;; ------------------------------------------------------------
-;;   (make <rotary-slider>
-;;         #:id "Test Frequency Rotary"
-
-;;         #:parameter-id "testFreqRotary"
-;;         #:parameter-name "Test Frequency Rotary"
-;;         #:processor-reference "testFreqRotary"
-
-;;         #:title "FREQ"
-;;         #:min 20.0
-;;         #:max 20000.0
-;;         #:default 1000.0
-;;         #:interval 0.0
-;;         #:scale 'logarithmic
-;;         #:value-type 'freq
-;;         #:suffix " Hz"
-
-;;         #:show-value #t
-;;         #:show-ticks #t
-;;         #:show-labels #t
-;;         #:tick-count 5
-;;         #:tick-mode 'endpoints
-
-;;         #:row 16
-;;         #:col 9
-;;         #:row-span 4
-;;         #:col-span 8
-
-;;         #:margin-tb 6
-;;         #:margin-lr 8)
-
-;;   ;; ------------------------------------------------------------
-;;   ;; TEST 3 - ICON TYPE / NO VALUE
-;;   ;; icon-type, show-value=#f
-;;   ;; ------------------------------------------------------------
-;;   (make <rotary-slider>
-;;         #:id "Test Icon Rotary"
-
-;;         #:parameter-id "testIconRotary"
-;;         #:parameter-name "Test Icon Rotary"
-;;         #:processor-reference "testIconRotary"
-
-;;         #:title "ICON"
-;;         #:min 0.0
-;;         #:max 1.0
-;;         #:default 0.5
-;;         #:interval 0.0
-;;         #:scale 'linear
-;;         #:value-type 'default
-;;         #:suffix ""
-
-;;         #:show-value #f
-;;         #:show-ticks #f
-;;         #:show-labels #f
-
-;;         #:icon-type 0
-
-;;         #:row 16
-;;         #:col 17
-;;         #:row-span 4
-;;         #:col-span 8
-
-;;         #:margin-tb 6
-;;         #:margin-lr 8)
-
-;;   ;; ------------------------------------------------------------
-;;   ;; TEST 4 - TICK MODE NONE
-;;   ;; i tick restano, le label devono sparire
-;;   ;; ------------------------------------------------------------
-;;   (make <rotary-slider>
-;;         #:id "Test TickMode None"
-
-;;         #:parameter-id "testTickModeNone"
-;;         #:parameter-name "Test TickMode None"
-;;         #:processor-reference "testTickModeNone"
-
-;;         #:title "NO LABELS"
-;;         #:min 0.0
-;;         #:max 100.0
-;;         #:default 50.0
-;;         #:interval 1.0
-;;         #:scale 'linear
-;;         #:value-type 'default
-;;         #:suffix ""
-
-;;         #:show-value #t
-;;         #:show-ticks #t
-;;         #:show-labels #t
-;;         #:tick-count 5
-;;         #:tick-mode 'none
-
-;;         #:row 20
-;;         #:col 1
-;;         #:row-span 4
-;;         #:col-span 8
-
-;;         #:margin-tb 6
-;;         #:margin-lr 8)
-
-;;   ;; ------------------------------------------------------------
-;;   ;; TEST 5 - CUSTOM TICK LABELS
-;;   ;; tick-labels custom
-;;   ;; ------------------------------------------------------------
-;;   (make <rotary-slider>
-;;         #:id "Test Custom Labels"
-
-;;         #:parameter-id "testCustomLabels"
-;;         #:parameter-name "Test Custom Labels"
-;;         #:processor-reference "testCustomLabels"
-
-;;         #:title "CUSTOM"
-;;         #:min 0.0
-;;         #:max 4.0
-;;         #:default 2.0
-;;         #:interval 1.0
-;;         #:scale 'linear
-;;         #:value-type 'default
-;;         #:suffix ""
-
-;;         #:show-value #t
-;;         #:show-ticks #t
-;;         #:show-labels #t
-;;         #:tick-count 5
-;;         #:tick-mode 'all
-;;         #:tick-labels '("MIN" "25" "50" "75" "MAX")
-
-;;         #:row 20
-;;         #:col 9
-;;         #:row-span 4
-;;         #:col-span 8
-
-;;         #:margin-tb 6
-;;         #:margin-lr 8)
-
-;;   ;; ------------------------------------------------------------
-;;   ;; TEST 6 - MORPH ICON
-;;   ;; morph-icon + tick-labels discreti
-;;   ;; ------------------------------------------------------------
-;;   (make <rotary-slider>
-;;         #:id "Test Morph Icon"
-
-;;         #:parameter-id "testMorphIcon"
-;;         #:parameter-name "Test Morph Icon"
-;;         #:processor-reference "testMorphIcon"
-
-;;         #:title "MORPH"
-;;         #:min 0.0
-;;         #:max 3.0
-;;         #:default 0.0
-;;         #:interval 1.0
-;;         #:scale 'linear
-;;         #:value-type 'default
-;;         #:suffix ""
-
-;;         #:show-value #t
-;;         #:show-ticks #t
-;;         #:show-labels #t
-;;         #:tick-count 4
-;;         #:tick-mode 'all
-;;         #:tick-labels '("SIN" "SQR" "SAW" "TRI")
-
-;;         #:morph-icon #t
-
-;;         #:row 20
-;;         #:col 17
-;;         #:row-span 4
-;;         #:col-span 8
-
-;;         #:margin-tb 6
-;;         #:margin-lr 8)
-
-;;   ;; ============================================================
-;;   ;; HARD BYPASS
-;;   ;;
-;;   ;; OFF -> processing normale
-;;   ;; ON  -> bypass totale
-;;   ;; ============================================================
-;;   (make <bypass-switch>
-;;     #:id "Bypass"
-;;     #:role 'bypass
-
-;;     #:text "Bypass"
-;;     #:default-state #f
-
-;;     #:parameter-id "AFBypass"
-;;     #:parameter-name "Bypass"
-;;     #:processor-reference "Bypass"
-;;     #:version-hint 1
-
-;;     #:tooltip "To bypass the plugin"
-
-;;     #:row 13
-;;     #:col 1
-;;     #:row-span 2
-;;     #:col-span 3
-
-;;     #:margin-tb 6
-;;     #:margin-lr 8)
-
-;;   ;; ============================================================
-;;   ;; DSP BYPASS
-;;   ;;
-;;   ;; OFF -> myplugin->render(buffer)
-;;   ;; ON  -> salta soltanto il DSP
-;;   ;; ============================================================
-;;   (make <switch>
-;;         #:id "DSP Bypass"
-;;         #:role 'dsp-bypass
-
-;;         #:text "DSP Bypass"
-;;         #:default-state #f
-
-;;         #:parameter-id "DSPBypass"
-;;         #:parameter-name "DSP Bypass"
-;;         #:processor-reference "DSPBypass"
-;;         #:version-hint 1
-
-;;         #:tooltip "Bypass only the plugin DSP"
-
-;;         #:row 13
-;;         #:col 5
-;;         #:row-span 2
-;;         #:col-span 3
-
-;;         #:margin-tb 6
-;;         #:margin-lr 8)
-
+(make <meter>
+  #:id "Test Input Level"
+  #:role 'input-meter
+
+  #:style 'segmented
+  #:scale-type 'db
+  #:is-sharp #f
+  #:glow-multiplier 0.6
+  #:range-min -60.0
+  #:range-max 6.0
+  #:num-segments 30
+  #:tick-mode 'all
+
+  #:row 2
+  #:col 2
+  #:row-span 11
+  #:col-span 2
+  #:margin-tb 4
+  #:margin-lr 4)
+
+
+(make <meter>
+  #:id "Test Output Level"
+  #:role 'output-meter
+
+  #:style 'analog
+  #:scale-type 'db
+  #:is-sharp #t
+  #:glow-multiplier 1.4
+  #:range-min -48.0
+  #:range-max 3.0
+  #:num-segments 16
+  #:tick-mode 'all
+
+  #:row 2
+  #:col 21
+  #:row-span 11
+  #:col-span 2
+  #:margin-tb 4
+  #:margin-lr 4)
+
+
+(make <scope>
+  #:id "Test Wave Monitor"
+  #:role 'scope
+
+  #:grid-style 'radar
+  #:is-sharp #f
+  #:glow-multiplier 1.6
+
+  #:row 5
+  #:col 6
+  #:row-span 6
+  #:col-span 13
+  #:margin-tb 4
+  #:margin-lr 4)
   )
 
 (define-public (hard-reload-project)
