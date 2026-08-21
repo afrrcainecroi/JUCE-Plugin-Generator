@@ -207,10 +207,11 @@
 	       generate-fft-runtime-members-code
 	       generate-myplugin-fft-members-code
 	       generate-myplugin-fft-init-code
-	       generate-myplugin-render-buffer-code
-	       generate-myplugin-render-block-code
+	       generate-myplugin-process-audio-buffer-code
+	       generate-myplugin-process-audio-block-code
 	       generate-myplugin-audio-init-code
 	       generate-myplugin-prepare-code
+	       generate-myplugin-reset-code
 	       )
   )
 

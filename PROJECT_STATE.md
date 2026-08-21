@@ -177,7 +177,7 @@ DSP bypass:
     role = dsp-bypass
 
 OFF:
-    myplugin->render(buffer) executes
+    myplugin->processAudio(buffer, 1) executes
 
 ON:
     only central DSP processing is bypassed.
@@ -197,7 +197,7 @@ Current desired pipeline:
         |
     OVERSAMPLING         [future]
         |
-    myplugin->render()
+    myplugin->processAudio()
         |
     DOWNSAMPLING         [future]
         |
@@ -240,12 +240,12 @@ generate-process-dsp checks role dsp-bypass.
 
 If dsp-bypass does not exist:
 
-    myplugin->render(buffer);
+    myplugin->processAudio(buffer, 1);
 
 If it exists:
 
     if (value_DSPBypass < 0.5f)
-        myplugin->render(buffer);
+        myplugin->processAudio(buffer, 1);
 
 Next DSP additions:
 

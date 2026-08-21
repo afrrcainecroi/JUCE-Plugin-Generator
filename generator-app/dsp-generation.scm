@@ -16,10 +16,11 @@
 	    generate-myplugin-fft-members-code
 
 	    generate-myplugin-fft-init-code
-	    generate-myplugin-render-buffer-code
-	    generate-myplugin-render-block-code
+	    generate-myplugin-process-audio-buffer-code
+	    generate-myplugin-process-audio-block-code
 	    generate-myplugin-audio-init-code
 	    generate-myplugin-prepare-code
+	    generate-myplugin-reset-code
 	    ))
 
 (define-public (generate-process-code)
@@ -122,7 +123,7 @@
         case 0:
         {
             // Oversampling OFF / 1x
-            myplugin->render(
+            myplugin->processAudio(
                 buffer,
                 1);
             break;
@@ -136,7 +137,7 @@
             auto oversampledBlock =
                 oversampling2x->processSamplesUp(block);
 
-            myplugin->render(
+            myplugin->processAudio(
                 oversampledBlock,
                 2);
 
@@ -152,7 +153,7 @@
             auto oversampledBlock =
                 oversampling4x->processSamplesUp(block);
 
-            myplugin->render(
+            myplugin->processAudio(
                 oversampledBlock,
                 4);
 
@@ -168,7 +169,7 @@
             auto oversampledBlock =
                 oversampling8x->processSamplesUp(block);
 
-            myplugin->render(
+            myplugin->processAudio(
                 oversampledBlock,
                 8);
 
@@ -177,7 +178,7 @@
         }
 
         default:
-            myplugin->render(
+            myplugin->processAudio(
                 buffer,
                 1);
             break;
@@ -187,7 +188,7 @@
                    ref))
 
          "
-    myplugin->render(
+    myplugin->processAudio(
         buffer,
         1);
 
@@ -605,7 +606,6 @@ std::atomic<int> scopeWriteIdx { 0 };
     oversampling4x->reset();
     oversampling8x->reset();
 
-    setLatencySamples(0);
 "
       ""))
 
@@ -797,10 +797,6 @@ public:
         return sampleRate;
     }
 
-    //void process(
-    //    juce::dsp::AudioBlock<float>& block,
-    //    JX11AudioProcessor* processor,
-    //    DoTheFFTJob& job)
     void process(
         juce::dsp::AudioBlock<float>& block,
         FFTProcessor& fftProcessor)
@@ -832,15 +828,6 @@ public:
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            /*processChannel(
-                channels[
-                    static_cast<size_t>(ch)],
-                block.getChannelPointer(
-                    static_cast<size_t>(ch)),
-                numSamples,
-                processor,
-                job);
-            */
             processChannel(
                 channels[static_cast<size_t>(ch)],
                 block.getChannelPointer(
@@ -1183,7 +1170,7 @@ private:
 (define-public (generate-myplugin-fft-init-code)
   "")
 
-(define-public (generate-myplugin-render-buffer-code)
+(define-public (generate-myplugin-process-audio-buffer-code)
   "
     juce::ignoreUnused(oversamplingFactor);
 
@@ -1201,7 +1188,7 @@ private:
         context);
 ")
 
-(define-public (generate-myplugin-render-block-code)
+(define-public (generate-myplugin-process-audio-block-code)
   "
     AudioProcessContext context;
 
@@ -1258,7 +1245,8 @@ private:
 
 
 (define-public (generate-myplugin-prepare-code)
-  "
+  (string-append
+   "
     const double hostSampleRate =
         sampleRate;
 
@@ -1292,7 +1280,6 @@ private:
         context.oversamplingFactor = 1;
 
         realPlugin1x->prepare(context);
-        realPlugin1x->reset();
     }
 
     {
@@ -1310,7 +1297,6 @@ private:
         context.oversamplingFactor = 2;
 
         realPlugin2x->prepare(context);
-        realPlugin2x->reset();
     }
 
     {
@@ -1328,7 +1314,6 @@ private:
         context.oversamplingFactor = 4;
 
         realPlugin4x->prepare(context);
-        realPlugin4x->reset();
     }
 
     {
@@ -1346,8 +1331,11 @@ private:
         context.oversamplingFactor = 8;
 
         realPlugin8x->prepare(context);
-        realPlugin8x->reset();
     }
+
+"
+   (if (fft-enabled?)
+       "
 
 
     // ==========================================================
@@ -1417,8 +1405,22 @@ private:
 
     fftContext.fftSize = 8192;
     fftProcessor8192.prepareFFT(fftContext);
+"
+       "")
+   "
+    reset();
+"))
 
-
+(define-public (generate-myplugin-reset-code)
+  (string-append
+   "
+    realPlugin1x->reset();
+    realPlugin2x->reset();
+    realPlugin4x->reset();
+    realPlugin8x->reset();
+"
+   (if (fft-enabled?)
+       "
     stft256.reset();
     stft512.reset();
     stft1024.reset();
@@ -1432,5 +1434,5 @@ private:
     fftProcessor2048.resetFFT();
     fftProcessor4096.resetFFT();
     fftProcessor8192.resetFFT();
-")
-
+"
+       "")))

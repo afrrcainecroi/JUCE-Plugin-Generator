@@ -255,7 +255,7 @@ DSP BYPASS
     |
 OVERSAMPLING
     |
-myplugin->render()
+myplugin->processAudio()
     |
 DOWNSAMPLING
     |
@@ -328,7 +328,7 @@ ON  -> solo il DSP centrale viene bypassato
 Se il componente `dsp-bypass` non esiste:
 
 ```cpp
-myplugin->render(buffer);
+myplugin->processAudio(buffer, 1);
 ```
 
 Se esiste:
@@ -336,7 +336,7 @@ Se esiste:
 ```cpp
 if (value_DSPBypass < 0.5f)
 {
-    myplugin->render(buffer);
+    myplugin->processAudio(buffer, 1);
 }
 ```
 

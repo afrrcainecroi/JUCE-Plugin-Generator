@@ -97,7 +97,6 @@
 ;;
 ;;Per generare i codici C++
 (define-public oversampling-filters '(filterHalfBandPolyphaseIIR filterHalfBandFIREquiripple))
-(define-public generate-fft-code #f)  ;;Inizializza il simbolo globale per generare codice fft
 (define* (GenerateC++ g::gen-var dst-folder new-name interface-definitions aggiornamento)
   ;;Inizializza i risultati
   (InitializeConstants)
@@ -179,8 +178,9 @@
  *MYPLUGIN_PREPARE*
  "\n"
  (generate-myplugin-prepare-code))
-  (AppendStringTo *MYPLUGIN_RENDER_BUFFER* "\n" (generate-myplugin-render-buffer-code))
-  (AppendStringTo *MYPLUGIN_RENDER_BLOCK* "\n" (generate-myplugin-render-block-code))
+  (AppendStringTo *MYPLUGIN_PROCESS_AUDIO_BUFFER* "\n" (generate-myplugin-process-audio-buffer-code))
+  (AppendStringTo *MYPLUGIN_PROCESS_AUDIO_BLOCK* "\n" (generate-myplugin-process-audio-block-code))
+  (AppendStringTo *MYPLUGIN_RESET* "\n" (generate-myplugin-reset-code))
 
   ;;
   ;;Genera i codici c++ per PluginEditor.cpp
@@ -195,58 +195,6 @@
 	(MyPlugin.cpp (string-append dst-folder "/Source/" "MyPlugin.cpp"))
 	)
     ;;
-    ;; (set! *OVERSAMPLING_PPC* (if *OVERSAMPLING-ENABLED*
-    ;; 				 (begin
-    ;; 				   (f-str "
-    ;; oversampling = std::make_unique<juce::dsp::Oversampling<float>>(
-    ;;     getTotalNumInputChannels(),
-    ;;     oversampling_factor,
-    ;;     juce::dsp::Oversampling<float>::FilterType::${(symbol->string *OVERSAMPLING-FILTER*)}
-    ;;     ${(if *OVERSAMPLING-isMaxQuality* \"true\" \"false\")}
-    ;;     ${(if *OVERSAMPLING-useIntegerLatency* \"true\" \"false\")});
-    ;; oversampling->reset();
-    ;; oversampling->initProcessing(static_cast<size_t>(samplesPerBlock));\n\n"))
-    ;; 				 (begin
-    ;; 				   "\n\n")))
-    ;;
-    ;; (set! *OVERSAMPLING_PPCRR* (if *OVERSAMPLING-ENABLED*
-    ;; 				   (begin
-    ;; 				     (f-str "
-    ;;     oversampling.reset();
-    ;; "))
-    ;; 				   (begin
-    ;; 				     "\n\n")))
-    ;;
-    ;; (set! *OVERSAMPLING_PPCPB* (if *OVERSAMPLING-ENABLED*
-    ;; 				   (begin
-    ;; 				     (f-str "
-    ;;     juce::dsp::AudioBlock<float> block(buffer);
-    ;;     auto oversampledBlock = oversampling->processSamplesUp(block);
-
-    ;;     // Apply nonlinear distortion to each sample
-    ;;     myplugin->render(oversampledBlock);
-
-    ;;     oversampling->processSamplesDown(block);
-    ;; ")) (begin
-    ;; 				     "\n	myplugin->render(buffer);\n\n")))
-    ;;
-    ;; (set! *OVERSAMPLING_PPH* (if *OVERSAMPLING-ENABLED*
-    ;; 				 (begin
-    ;; 				   (f-str "
-    ;; 	std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
-    ;; 	size_t oversampling_factor=${*OVERSAMPLING-ENABLED*};
-    ;; " ))
-    ;; 				 (begin
-    ;; 				   "\n\n")))
-    ;;
-    ;;Il codice per la FFT o per NON FFT, ma solo se sto generando la prima volta. Se
-    ;;già esiste, non fare nulla!
-    ;; (if generate-fft-code ;;Lo posso lasciare com'è poiché #f
-    ;; 	(set! *SYNTH_H_RP* CODICE-PER-FFT)
-    ;; 	(set! *SYNTH_H_RP* CODICE-NON-PER-FFT))
-    ;; (set! *SYNTH_H_RP* "")
-    ;;
-
     ;; (letrec-syntax ((show
     ;; 		     (syntax-rules ()
     ;; 		       ((show)
@@ -256,7 +204,7 @@
     ;; 			  (Show! (symbol->string 'k1) k1)
     ;; 			  (show k2 ...))))))
     ;;   (show *INTERFACE* *RESIZED* *BACKGROUND* ;; *FOOTER*
-    ;; 	    *DESTROY* *DECLARATIONS* *PARAMS* *DPARAMS* *GETPARAMS* *VALUEPARAMS* *SCREENSIZE* *OVERSAMPLING_PPC* *OVERSAMPLING_PPCPB* *OVERSAMPLING_PPCRR* *OVERSAMPLING_PPH* *WETDRY_PPC_PREFIX* *WETDRY_PPC_POSTFIX* *SYNTH_H_RP* *GRID*)
+    ;; 	    *DESTROY* *DECLARATIONS* *PARAMS* *DPARAMS* *GETPARAMS* *VALUEPARAMS* *SCREENSIZE* *OVERSAMPLING_PPC* *OVERSAMPLING_PPCPB* *OVERSAMPLING_PPCRR* *OVERSAMPLING_PPH* *WETDRY_PPC_PREFIX* *WETDRY_PPC_POSTFIX* *GRID*)
     ;;   )
     ;;
     (replace-between-flags PluginEditor.cpp *INTERFACE::START* *INTERFACE::END* *INTERFACE*)
@@ -288,13 +236,18 @@
     (replace-between-flags PluginProcessor.cpp *WETDRY_PPC_PREFIX::START* *WETDRY_PPC_PREFIX::END* *WETDRY_PPC_PREFIX*)
     (replace-between-flags PluginProcessor.cpp *WETDRY_PPC_POSTFIX::START* *WETDRY_PPC_POSTFIX::END* *WETDRY_PPC_POSTFIX*)
     (replace-between-flags MyPlugin.cpp *MYPLUGIN_FFT_INIT::START* *MYPLUGIN_FFT_INIT::END* *MYPLUGIN_FFT_INIT*)
-    (replace-between-flags MyPlugin.cpp *MYPLUGIN_RENDER_BUFFER::START* *MYPLUGIN_RENDER_BUFFER::END* *MYPLUGIN_RENDER_BUFFER*)
-    (replace-between-flags MyPlugin.cpp *MYPLUGIN_RENDER_BLOCK::START* *MYPLUGIN_RENDER_BLOCK::END* *MYPLUGIN_RENDER_BLOCK*)
+    (replace-between-flags MyPlugin.cpp *MYPLUGIN_PROCESS_AUDIO_BUFFER::START* *MYPLUGIN_PROCESS_AUDIO_BUFFER::END* *MYPLUGIN_PROCESS_AUDIO_BUFFER*)
+    (replace-between-flags MyPlugin.cpp *MYPLUGIN_PROCESS_AUDIO_BLOCK::START* *MYPLUGIN_PROCESS_AUDIO_BLOCK::END* *MYPLUGIN_PROCESS_AUDIO_BLOCK*)
     (replace-between-flags
  MyPlugin.cpp
  *MYPLUGIN_PREPARE::START*
  *MYPLUGIN_PREPARE::END*
  *MYPLUGIN_PREPARE*)
+    (replace-between-flags
+ MyPlugin.cpp
+ *MYPLUGIN_RESET::START*
+ *MYPLUGIN_RESET::END*
+ *MYPLUGIN_RESET*)
     ;;
     ;;FFT
     (replace-between-flags Synth.h *FFT_INFRASTRUCTURE::START* *FFT_INFRASTRUCTURE::END* *FFT_INFRASTRUCTURE*)
@@ -307,7 +260,6 @@
     (replace-between-flags PluginEditor.cpp *GRID::START* *GRID::END* (generate-grid-code))
     ;;
     ;;La gestione del fft o no fft (real plugin!)
-    ;; (replace-between-flags Synth.h *SYNTH_H_RP::START* *SYNTH_H_RP::END* *SYNTH_H_RP*)
     )
   (ResaveProjucerProject dst-folder))
 
@@ -770,7 +722,7 @@ inserire le dichiarazioni delle variabili utilizzate dai costruttori ; ;
   (let ((name title)
 	(id (string-append paramReference "ID"))
 	(tooltip (string-append "This is a " title)))
-    (unless generate-fft-code (set! *WETDRY_PPC_POSTFIX* "\n
+    (set! *WETDRY_PPC_POSTFIX* "\n
     for (int ch=0; ch<value_info_totalNumOutputChannels; ch++) {
         auto wet  = buffer.getWritePointer(ch);
         auto dry  = dryBuffer.getReadPointer(ch);
@@ -781,10 +733,14 @@ inserire le dichiarazioni delle variabili utilizzate dai costruttori ; ;
     }\n
 ")
 	    (set! *WETDRY_PPC_PREFIX* "\n
-    //Salva una dry copia
-    juce::AudioBuffer<float> dryBuffer;
-    dryBuffer.makeCopyOf(buffer);\n
-"))
+    // Salva la copia dry nel buffer preallocato da prepareToPlay().
+    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+        dryBuffer.copyFrom(
+            channel,
+            0,
+            buffer.getReadPointer(channel),
+            buffer.getNumSamples());\n
+")
     (GenerateRotarySlider paramReference '() title tx ty width height name id 0.0 1.0 0.5 tooltip #:step-size .01)))
 ;;
 (define*-public (GenerateOversamplingRotarySlider tx ty width height
@@ -816,9 +772,13 @@ inserire le dichiarazioni delle variabili utilizzate dai costruttori ; ;
     }\n
 	")
     (set! *WETDRY_PPC_PREFIX* "\n
-    //Salva una dry copia
-    juce::AudioBuffer<float> dryBuffer;
-    dryBuffer.makeCopyOf(buffer);\n
+    // Salva la copia dry nel buffer preallocato da prepareToPlay().
+    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+        dryBuffer.copyFrom(
+            channel,
+            0,
+            buffer.getReadPointer(channel),
+            buffer.getNumSamples());\n
 	")
     (GenerateRotarySlider paramReference '() title tx ty width height name id 0 8 1 tooltip #:step-size 1 #:isOversampling #t)))
 ;;
@@ -1340,19 +1300,13 @@ var id var))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defun*-public MakeNewProject (new-name interface-definitions #:key (generateFFTcode #f))
+(defun*-public MakeNewProject (new-name interface-definitions)
   ;; (begin
   ;;   (display "Something of strange happened. Call franco!!!")
   ;;   #f)
   ;; =>
   (unless (CouldIRun?)
     (return 0))
-  ;;
-  ;;A meno che non sia indicato, il codice non è per fft
-  ;; (if generateFFTcode
-  ;;     (set! generate-fft-code #t)
-  ;;     (set! generate-fft-code #f)
-  ;;     )
   ;;
   (set! g::gen-var (GetNextVariableName)) ;;per generare le variabili quando serviranno
   ;;
@@ -1380,7 +1334,12 @@ var id var))
       ;;(f:delete (string-append dst-folder "/Builds") #t)
       ;;
       ;; Ora possiamo cambiare tutti i nomi nel progetto
-      (f:traverse dst-folder (lambda (nome) (do-replace-in-file nome old-project-name new-name)) #:files-only #t)
+      (f:traverse
+       dst-folder
+       (lambda (nome)
+         (unless (string-suffix? "/Source/PluginDSP.h" nome)
+           (do-replace-in-file nome old-project-name new-name)))
+       #:files-only #t)
       ;;
       ;;Ora gli chiedo di specificare il file di configurazione dell'interfaccia utente
       (GenerateC++ g::gen-var dst-folder new-name interface-definitions #f) ;;non è aggiornamento!!
@@ -1886,5 +1845,3 @@ var id var))
      (generator-app code-generator)))
 
   (display "Reload del progetto completato.\n"))
-
-
