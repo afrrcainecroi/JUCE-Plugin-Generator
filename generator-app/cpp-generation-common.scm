@@ -1,7 +1,8 @@
 (define-module (generator-app cpp-generation-common)
   #:use-module (ice-9 format)
   #:use-module (srfi srfi-1)
-  #:export (slider-properties->cpp
+  #:export (
+	    ;;slider-properties->cpp
             slider-normalisable-range->cpp
             meter-properties->cpp
             scope-properties->cpp
@@ -27,72 +28,73 @@
              args
              #f))
 
-(define (slider-properties->cpp model)
-  (let ((var         (assoc-ref model 'var))
-        (title       (assoc-ref model 'title))
-        (value-type  (assoc-ref model 'value-type))
-        (suffix      (assoc-ref model 'suffix))
-        (show-value  (assoc-ref model 'show-value))
-        (show-ticks  (assoc-ref model 'show-ticks))
-        (show-labels (assoc-ref model 'show-labels))
-        (tick-count  (assoc-ref model 'tick-count))
-        (tick-mode   (assoc-ref model 'tick-mode))
-        (tick-labels (assoc-ref model 'tick-labels)))
+;; (define (slider-properties->cpp model)
+;;   (let ((var         (assoc-ref model 'var))
+;;         (title       (assoc-ref model 'title))
+;;         (value-type  (assoc-ref model 'value-type))
+;;         (suffix      (assoc-ref model 'suffix))
+;;         (show-value  (assoc-ref model 'show-value))
+;;         (show-ticks  (assoc-ref model 'show-ticks))
+;;         (show-labels (assoc-ref model 'show-labels))
+;;         (tick-count  (assoc-ref model 'tick-count))
+;;         (tick-mode   (assoc-ref model 'tick-mode))
+;;         (tick-labels (assoc-ref model 'tick-labels)))
 
-    (string-append
+;;     (string-append
 
-     (format #f
-"~a.getProperties().set(\"title\", ~a);
-"
-             var
-             (cpp-string title))
+;;      (format #f
+;; "~a.getProperties().set(\"title\", ~a);
+;; "
+;;              var
+;;              (cpp-string title))
 
-     (format #f
-"~a.getProperties().set(\"valueType\", ~a);
-"
-             var
-             (cpp-string
-              (symbol->string value-type)))
+;;      (format #f
+;; "~a.getProperties().set(\"valueType\", ~a);
+;; "
+;;              var
+;;              (cpp-string
+;;               (symbol->string value-type)))
 
-     (format #f
-"~a.getProperties().set(\"suffix\", ~a);
-"
-             var
-             (cpp-string suffix))
+;;      (format #f
+;; "~a.getProperties().set(\"suffix\", ~a);
+;; "
+;;              var
+;;              (cpp-string suffix))
 
-     (format #f
-"~a.getProperties().set(\"showValue\", ~a);
-"
-             var
-             (bool->cpp show-value))
+;;      (format #f
+;; "~a.getProperties().set(\"showValue\", ~a);
+;; "
+;;              var
+;;              (bool->cpp show-value))
 
-     (format #f
-"~a.getProperties().set(\"showTicks\", ~a);
-"
-             var
-             (bool->cpp show-ticks))
+;;      (format #f
+;; "~a.getProperties().set(\"showTicks\", ~a);
+;; "
+;;              var
+;;              (bool->cpp show-ticks))
 
-     (format #f
-"~a.getProperties().set(\"showLabels\", ~a);
-"
-             var
-             (bool->cpp show-labels))
+;;      (format #f
+;; "~a.getProperties().set(\"showLabels\", ~a);
+;; "
+;;              var
+;;              (bool->cpp show-labels))
 
-     (format #f
-"~a.getProperties().set(\"tickCount\", ~a);
-"
-             var
-             tick-count)
+;;      (format #f
+;; "~a.getProperties().set(\"tickCount\", ~a);
+;; "
+;;              var
+;;              tick-count)
 
-     (format #f
-"~a.getProperties().set(\"tickMode\", ~a);
-"
-             var
-             (cpp-string
-              (symbol->string tick-mode)))
+;;      (format #f
+;; "~a.getProperties().set(\"tickMode\", ~a);
+;; "
+;;              var
+;;              (cpp-string
+;;               (symbol->string tick-mode)))
 
-     ;; tick-labels lo affrontiamo separatamente se non è già emesso.
-     )))
+;;      ;; tick-labels lo affrontiamo separatamente se non è già emesso.
+;;      )))
+
 (define (slider-normalisable-range->cpp model)
   (let ((min      (assoc-ref model 'min))
         (max      (assoc-ref model 'max))

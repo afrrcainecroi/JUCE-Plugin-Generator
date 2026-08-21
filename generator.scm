@@ -1679,6 +1679,94 @@ var id var))
   #:col-span 13
   #:margin-tb 4
   #:margin-lr 4)
+
+(make <rotary-slider>
+  #:id "Test Log Rotary"
+  #:parameter-id "testLogRotary"
+  #:parameter-name "Test Log Rotary"
+  #:processor-reference "testLogRotary"
+  #:version-hint 1
+
+  #:title "FREQUENCY"
+  #:min 20.0
+  #:max 20000.0
+  #:default 1000.0
+  #:interval 0.0
+  #:scale 'logarithmic
+  #:value-type 'default
+  #:suffix " Hz"
+
+  #:show-value #t
+  #:show-ticks #t
+  #:show-labels #t
+  #:tick-count 7
+  #:tick-mode 'all
+
+  #:row 3
+  #:col 3
+  #:row-span 5
+  #:col-span 5)
+
+
+(make <linear-slider>
+  #:id "Test Horizontal Slider"
+  #:parameter-id "testHorizontal"
+  #:parameter-name "Test Horizontal"
+  #:processor-reference "testHorizontal"
+  #:version-hint 1
+
+  #:orientation 'horizontal
+  #:title "MIX"
+  #:min 0.0
+  #:max 100.0
+  #:default 50.0
+  #:interval 1.0
+  #:scale 'linear
+  #:value-type 'default
+  #:suffix " %"
+
+  #:show-value #t
+  #:show-ticks #t
+  #:show-labels #t
+  #:tick-count 5
+  #:tick-mode 'all
+  #:tick-labels '("DRY" "25" "50" "75" "WET")
+
+  #:row 9
+  #:col 5
+  #:row-span 3
+  #:col-span 14)
+
+
+(make <linear-slider>
+  #:id "Test Vertical Slider"
+  #:parameter-id "testVertical"
+  #:parameter-name "Test Vertical"
+  #:processor-reference "testVertical"
+  #:version-hint 1
+
+  #:orientation 'vertical
+  #:title "LEVEL"
+  #:min -60.0
+  #:max 6.0
+  #:default 0.0
+  #:interval 1.0
+  #:scale 'linear
+  #:value-type 'default
+  #:suffix " dB"
+
+  #:show-value #t
+  #:show-ticks #t
+  #:show-labels #t
+  #:tick-count 7
+  #:tick-mode 'endpoints
+
+  #:row 3
+  #:col 20
+  #:row-span 9
+  #:col-span 3)
+
+
   )
 
 (define-public (hard-reload-project)
