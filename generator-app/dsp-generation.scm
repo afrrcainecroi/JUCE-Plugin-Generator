@@ -18,6 +18,8 @@
 	    generate-myplugin-fft-init-code
 	    generate-myplugin-render-buffer-code
 	    generate-myplugin-render-block-code
+	    generate-myplugin-audio-init-code
+	    generate-myplugin-prepare-code
 	    ))
 
 (define-public (generate-process-code)
@@ -93,7 +95,7 @@
      ;; ==========================================================
      ;; FFT / SPECTRAL PROCESSING
      ;;
-     ;; Sempre sul buffer originale, PRIMA dell'oversampling.
+     ;; Sempre a sample-rate host.
      ;; ==========================================================
 
      (if fft
@@ -119,8 +121,10 @@
     {
         case 0:
         {
-            // Oversampling OFF
-            myplugin->render(buffer);
+            // Oversampling OFF / 1x
+            myplugin->render(
+                buffer,
+                1);
             break;
         }
 
@@ -132,7 +136,9 @@
             auto oversampledBlock =
                 oversampling2x->processSamplesUp(block);
 
-            myplugin->render(oversampledBlock);
+            myplugin->render(
+                oversampledBlock,
+                2);
 
             oversampling2x->processSamplesDown(block);
             break;
@@ -146,7 +152,9 @@
             auto oversampledBlock =
                 oversampling4x->processSamplesUp(block);
 
-            myplugin->render(oversampledBlock);
+            myplugin->render(
+                oversampledBlock,
+                4);
 
             oversampling4x->processSamplesDown(block);
             break;
@@ -160,14 +168,18 @@
             auto oversampledBlock =
                 oversampling8x->processSamplesUp(block);
 
-            myplugin->render(oversampledBlock);
+            myplugin->render(
+                oversampledBlock,
+                8);
 
             oversampling8x->processSamplesDown(block);
             break;
         }
 
         default:
-            myplugin->render(buffer);
+            myplugin->render(
+                buffer,
+                1);
             break;
     }
 
@@ -175,7 +187,9 @@
                    ref))
 
          "
-    myplugin->render(buffer);
+    myplugin->render(
+        buffer,
+        1);
 
 "))))
 
@@ -783,10 +797,13 @@ public:
         return sampleRate;
     }
 
+    //void process(
+    //    juce::dsp::AudioBlock<float>& block,
+    //    JX11AudioProcessor* processor,
+    //    DoTheFFTJob& job)
     void process(
         juce::dsp::AudioBlock<float>& block,
-        JX11AudioProcessor* processor,
-        DoTheFFTJob& job)
+        FFTProcessor& fftProcessor)
     {
         jassert(fft != nullptr);
 
@@ -815,7 +832,7 @@ public:
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            processChannel(
+            /*processChannel(
                 channels[
                     static_cast<size_t>(ch)],
                 block.getChannelPointer(
@@ -823,7 +840,15 @@ public:
                 numSamples,
                 processor,
                 job);
-        }
+            */
+            processChannel(
+                channels[static_cast<size_t>(ch)],
+                block.getChannelPointer(
+                    static_cast<size_t>(ch)),
+                numSamples,
+                ch,
+                fftProcessor);
+            }
     }
 
 private:
@@ -844,8 +869,8 @@ private:
 
     void processFrame(
         Channel& channel,
-        JX11AudioProcessor* processor,
-        DoTheFFTJob& job)
+        int channelIndex,
+        FFTProcessor& fftProcessor)
     {
         std::memcpy(
             channel.analysis.data(),
@@ -878,10 +903,15 @@ private:
         // =====================================================
         // DEVELOPER FFT CALLBACK
         // =====================================================
-        job.doTheFFTJob(
-            processor,
-            fftSize,
-            channel.reim);
+        FFTProcessContext context;
+
+        context.fftSize = fftSize;
+        context.sampleRate = sampleRate;
+        context.channel = channelIndex;
+
+        fftProcessor.processFFT(
+            channel.reim,
+            context);
 
         fft->performRealOnlyInverseTransform(
             channel.reim.data());
@@ -931,8 +961,8 @@ private:
         Channel& channel,
         float* samples,
         int numSamples,
-        JX11AudioProcessor* processor,
-        DoTheFFTJob& job)
+        int channelIndex,
+        FFTProcessor& fftProcessor)
     {
         std::memcpy(
             channel.inputBlock.data(),
@@ -971,10 +1001,10 @@ private:
 
             while (channel.fifoFill >= fftSize)
             {
-                processFrame(
-                    channel,
-                    processor,
-                    job);
+               processFrame(
+                   channel,
+                   channelIndex,
+                   fftProcessor);
             }
 
             const int emitCount =
@@ -1086,7 +1116,12 @@ private:
     GeneratedStft stft4096;
     GeneratedStft stft8192;
 
-    DoTheFFTJob generatedFftJob;
+    FFTProcessor fftProcessor256   { processor };
+    FFTProcessor fftProcessor512   { processor };
+    FFTProcessor fftProcessor1024  { processor };
+    FFTProcessor fftProcessor2048  { processor };
+    FFTProcessor fftProcessor4096  { processor };
+    FFTProcessor fftProcessor8192  { processor };
 
     void processFFT(
         juce::AudioBuffer<float>& buffer)
@@ -1098,49 +1133,42 @@ private:
                 processor->value_~a))
         {
             case 0:
-                // FFT OFF
                 return;
 
             case 1:
                 stft256.process(
                     block,
-                    processor,
-                    generatedFftJob);
+                    fftProcessor256);
                 break;
 
             case 2:
                 stft512.process(
                     block,
-                    processor,
-                    generatedFftJob);
+                    fftProcessor512);
                 break;
 
             case 3:
                 stft1024.process(
                     block,
-                    processor,
-                    generatedFftJob);
+                    fftProcessor1024);
                 break;
 
             case 4:
                 stft2048.process(
                     block,
-                    processor,
-                    generatedFftJob);
+                    fftProcessor2048);
                 break;
 
             case 5:
                 stft4096.process(
                     block,
-                    processor,
-                    generatedFftJob);
+                    fftProcessor4096);
                 break;
 
             case 6:
                 stft8192.process(
                     block,
-                    processor,
-                    generatedFftJob);
+                    fftProcessor8192);
                 break;
 
             default:
@@ -1153,77 +1181,256 @@ private:
 
 
 (define-public (generate-myplugin-fft-init-code)
-  (if (fft-model)
-      "
-    {
-        const int fftChannels =
-            juce::jmax(
-                1,
-                juce::jmax(
-                    processor->getTotalNumInputChannels(),
-                    processor->getTotalNumOutputChannels()));
-
-        const int fftMaximumBlockSize =
-            juce::jmax(
-                1,
-                processor->value_info_max_samplesPerBlock);
-
-        const double fftSampleRate =
-            processor->value_info_sampleRate;
-
-        stft256.prepare(
-            256,
-            fftChannels,
-            fftMaximumBlockSize,
-            fftSampleRate);
-
-        stft512.prepare(
-            512,
-            fftChannels,
-            fftMaximumBlockSize,
-            fftSampleRate);
-
-        stft1024.prepare(
-            1024,
-            fftChannels,
-            fftMaximumBlockSize,
-            fftSampleRate);
-
-        stft2048.prepare(
-            2048,
-            fftChannels,
-            fftMaximumBlockSize,
-            fftSampleRate);
-
-        stft4096.prepare(
-            4096,
-            fftChannels,
-            fftMaximumBlockSize,
-            fftSampleRate);
-
-        stft8192.prepare(
-            8192,
-            fftChannels,
-            fftMaximumBlockSize,
-            fftSampleRate);
-
-        stft256.reset();
-        stft512.reset();
-        stft1024.reset();
-        stft2048.reset();
-        stft4096.reset();
-        stft8192.reset();
-    }
-"
-      ""))
-
+  "")
 
 (define-public (generate-myplugin-render-buffer-code)
   "
-    realPlugin->render(buffer);
+    juce::ignoreUnused(oversamplingFactor);
+
+    juce::dsp::AudioBlock<float> block(buffer);
+
+    AudioProcessContext context;
+
+    context.sampleRate =
+        processor->value_info_sampleRate;
+
+    context.oversamplingFactor = 1;
+
+    realPlugin1x->processAudio(
+        block,
+        context);
 ")
 
 (define-public (generate-myplugin-render-block-code)
   "
-    realPlugin->render(buffer);
+    AudioProcessContext context;
+
+    context.sampleRate =
+        processor->value_info_sampleRate
+        * oversamplingFactor;
+
+    context.oversamplingFactor =
+        oversamplingFactor;
+
+    switch (oversamplingFactor)
+    {
+        case 2:
+            realPlugin2x->processAudio(
+                buffer,
+                context);
+            break;
+
+        case 4:
+            realPlugin4x->processAudio(
+                buffer,
+                context);
+            break;
+
+        case 8:
+            realPlugin8x->processAudio(
+                buffer,
+                context);
+            break;
+
+        default:
+            realPlugin1x->processAudio(
+                buffer,
+                context);
+            break;
+    }
 ")
+
+
+(define-public (generate-myplugin-audio-init-code)
+  "
+    realPlugin1x =
+        std::make_unique<RealPlugin>(processor);
+
+    realPlugin2x =
+        std::make_unique<RealPlugin>(processor);
+
+    realPlugin4x =
+        std::make_unique<RealPlugin>(processor);
+
+    realPlugin8x =
+        std::make_unique<RealPlugin>(processor);
+")
+
+
+(define-public (generate-myplugin-prepare-code)
+  "
+    const double hostSampleRate =
+        sampleRate;
+
+    const int hostMaximumBlockSize =
+        juce::jmax(
+            1,
+            samplesPerBlock);
+
+    const int audioChannels =
+        juce::jmax(
+            1,
+            numChannels);
+
+
+    // ==========================================================
+    // TIME DOMAIN DSP
+    // ==========================================================
+
+    {
+        AudioPrepareContext context;
+
+        context.sampleRate =
+            hostSampleRate;
+
+        context.maximumBlockSize =
+            hostMaximumBlockSize;
+
+        context.numChannels =
+            audioChannels;
+
+        context.oversamplingFactor = 1;
+
+        realPlugin1x->prepare(context);
+        realPlugin1x->reset();
+    }
+
+    {
+        AudioPrepareContext context;
+
+        context.sampleRate =
+            hostSampleRate * 2.0;
+
+        context.maximumBlockSize =
+            hostMaximumBlockSize * 2;
+
+        context.numChannels =
+            audioChannels;
+
+        context.oversamplingFactor = 2;
+
+        realPlugin2x->prepare(context);
+        realPlugin2x->reset();
+    }
+
+    {
+        AudioPrepareContext context;
+
+        context.sampleRate =
+            hostSampleRate * 4.0;
+
+        context.maximumBlockSize =
+            hostMaximumBlockSize * 4;
+
+        context.numChannels =
+            audioChannels;
+
+        context.oversamplingFactor = 4;
+
+        realPlugin4x->prepare(context);
+        realPlugin4x->reset();
+    }
+
+    {
+        AudioPrepareContext context;
+
+        context.sampleRate =
+            hostSampleRate * 8.0;
+
+        context.maximumBlockSize =
+            hostMaximumBlockSize * 8;
+
+        context.numChannels =
+            audioChannels;
+
+        context.oversamplingFactor = 8;
+
+        realPlugin8x->prepare(context);
+        realPlugin8x->reset();
+    }
+
+
+    // ==========================================================
+    // FFT / STFT
+    // ==========================================================
+
+    stft256.prepare(
+        256,
+        audioChannels,
+        hostMaximumBlockSize,
+        hostSampleRate);
+
+    stft512.prepare(
+        512,
+        audioChannels,
+        hostMaximumBlockSize,
+        hostSampleRate);
+
+    stft1024.prepare(
+        1024,
+        audioChannels,
+        hostMaximumBlockSize,
+        hostSampleRate);
+
+    stft2048.prepare(
+        2048,
+        audioChannels,
+        hostMaximumBlockSize,
+        hostSampleRate);
+
+    stft4096.prepare(
+        4096,
+        audioChannels,
+        hostMaximumBlockSize,
+        hostSampleRate);
+
+    stft8192.prepare(
+        8192,
+        audioChannels,
+        hostMaximumBlockSize,
+        hostSampleRate);
+
+
+    FFTPrepareContext fftContext;
+
+    fftContext.sampleRate =
+        hostSampleRate;
+
+    fftContext.numChannels =
+        audioChannels;
+
+
+    fftContext.fftSize = 256;
+    fftProcessor256.prepareFFT(fftContext);
+
+    fftContext.fftSize = 512;
+    fftProcessor512.prepareFFT(fftContext);
+
+    fftContext.fftSize = 1024;
+    fftProcessor1024.prepareFFT(fftContext);
+
+    fftContext.fftSize = 2048;
+    fftProcessor2048.prepareFFT(fftContext);
+
+    fftContext.fftSize = 4096;
+    fftProcessor4096.prepareFFT(fftContext);
+
+    fftContext.fftSize = 8192;
+    fftProcessor8192.prepareFFT(fftContext);
+
+
+    stft256.reset();
+    stft512.reset();
+    stft1024.reset();
+    stft2048.reset();
+    stft4096.reset();
+    stft8192.reset();
+
+    fftProcessor256.resetFFT();
+    fftProcessor512.resetFFT();
+    fftProcessor1024.resetFFT();
+    fftProcessor2048.resetFFT();
+    fftProcessor4096.resetFFT();
+    fftProcessor8192.resetFFT();
+")
+

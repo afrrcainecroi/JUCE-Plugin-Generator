@@ -171,7 +171,14 @@
   (AppendStringTo *OVERSAMPLING_PPCRR* (generate-oversampling-release-code))
   (AppendStringTo *FFT_INFRASTRUCTURE* "\n" (generate-fft-infrastructure-code))
   (AppendStringTo *FFT_MYPLUGIN_MEMBERS* "\n" (generate-myplugin-fft-members-code))
-  (AppendStringTo *MYPLUGIN_FFT_INIT* "\n" (generate-myplugin-fft-init-code))
+  (AppendStringTo *MYPLUGIN_FFT_INIT* "\n"
+                (generate-myplugin-audio-init-code)
+                "\n"
+                (generate-myplugin-fft-init-code))
+  (AppendStringTo
+ *MYPLUGIN_PREPARE*
+ "\n"
+ (generate-myplugin-prepare-code))
   (AppendStringTo *MYPLUGIN_RENDER_BUFFER* "\n" (generate-myplugin-render-buffer-code))
   (AppendStringTo *MYPLUGIN_RENDER_BLOCK* "\n" (generate-myplugin-render-block-code))
 
@@ -234,9 +241,10 @@
     ;;
     ;;Il codice per la FFT o per NON FFT, ma solo se sto generando la prima volta. Se
     ;;già esiste, non fare nulla!
-    (if generate-fft-code ;;Lo posso lasciare com'è poiché #f
-	(set! *SYNTH_H_RP* CODICE-PER-FFT)
-	(set! *SYNTH_H_RP* CODICE-NON-PER-FFT))
+    ;; (if generate-fft-code ;;Lo posso lasciare com'è poiché #f
+    ;; 	(set! *SYNTH_H_RP* CODICE-PER-FFT)
+    ;; 	(set! *SYNTH_H_RP* CODICE-NON-PER-FFT))
+    ;; (set! *SYNTH_H_RP* "")
     ;;
 
     ;; (letrec-syntax ((show
@@ -282,6 +290,11 @@
     (replace-between-flags MyPlugin.cpp *MYPLUGIN_FFT_INIT::START* *MYPLUGIN_FFT_INIT::END* *MYPLUGIN_FFT_INIT*)
     (replace-between-flags MyPlugin.cpp *MYPLUGIN_RENDER_BUFFER::START* *MYPLUGIN_RENDER_BUFFER::END* *MYPLUGIN_RENDER_BUFFER*)
     (replace-between-flags MyPlugin.cpp *MYPLUGIN_RENDER_BLOCK::START* *MYPLUGIN_RENDER_BLOCK::END* *MYPLUGIN_RENDER_BLOCK*)
+    (replace-between-flags
+ MyPlugin.cpp
+ *MYPLUGIN_PREPARE::START*
+ *MYPLUGIN_PREPARE::END*
+ *MYPLUGIN_PREPARE*)
     ;;
     ;;FFT
     (replace-between-flags Synth.h *FFT_INFRASTRUCTURE::START* *FFT_INFRASTRUCTURE::END* *FFT_INFRASTRUCTURE*)
@@ -294,9 +307,7 @@
     (replace-between-flags PluginEditor.cpp *GRID::START* *GRID::END* (generate-grid-code))
     ;;
     ;;La gestione del fft o no fft (real plugin!)
-    (unless aggiornamento
-      (replace-between-flags Synth.h *SYNTH_H_RP::START* *SYNTH_H_RP::END* *SYNTH_H_RP*)
-      )
+    ;; (replace-between-flags Synth.h *SYNTH_H_RP::START* *SYNTH_H_RP::END* *SYNTH_H_RP*)
     )
   (ResaveProjucerProject dst-folder))
 
@@ -1338,10 +1349,10 @@ var id var))
     (return 0))
   ;;
   ;;A meno che non sia indicato, il codice non è per fft
-  (if generateFFTcode
-      (set! generate-fft-code #t)
-      (set! generate-fft-code #f)
-      )
+  ;; (if generateFFTcode
+  ;;     (set! generate-fft-code #t)
+  ;;     (set! generate-fft-code #f)
+  ;;     )
   ;;
   (set! g::gen-var (GetNextVariableName)) ;;per generare le variabili quando serviranno
   ;;

@@ -209,6 +209,8 @@
 	       generate-myplugin-fft-init-code
 	       generate-myplugin-render-buffer-code
 	       generate-myplugin-render-block-code
+	       generate-myplugin-audio-init-code
+	       generate-myplugin-prepare-code
 	       )
   )
 

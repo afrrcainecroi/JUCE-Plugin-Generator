@@ -152,7 +152,7 @@
     OVERSAMPLING_PPH
     WETDRY_PPC_PREFIX
     WETDRY_PPC_POSTFIX
-    SYNTH_H_RP
+    ;;SYNTH_H_RP
     PROCESS
     PAINT_OVER_CHILDREN
     IMAGE_RESOURCES
@@ -163,6 +163,7 @@
     MYPLUGIN_FFT_INIT
     MYPLUGIN_RENDER_BUFFER
     MYPLUGIN_RENDER_BLOCK
+    MYPLUGIN_PREPARE
     ))
 ;;
 ;; (define-public *OVERSAMPLING_PPC* "")
@@ -213,314 +214,314 @@
 ;;      (equal? (assoc-ref component 'id) id))
 ;;    *components*))
 
-(define-public CODICE-PER-FFT "
-class SimpleStftStereo
-{
-public:
-    void setFftSize(int N)
-    {
-        jassert(juce::isPowerOfTwo(N));
-        fftSize = N;
-        hopSize = N / 2;
+;; (define-public CODICE-PER-FFT "
+;; class SimpleStftStereo
+;; {
+;; public:
+;;     void setFftSize(int N)
+;;     {
+;;         jassert(juce::isPowerOfTwo(N));
+;;         fftSize = N;
+;;         hopSize = N / 2;
 
-        fft.reset(new juce::dsp::FFT((int)std::log2((double)fftSize)));
-        // sqrt-Hann tables (COLA con hop=N/2)
-        winAna.resize(fftSize);
-        winSyn.resize(fftSize);
-        for (int n = 0; n < fftSize; ++n)
-        {
-            const float hann = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * (float)n / (float)(fftSize - 1)));
-            const float s = std::sqrt(juce::jmax(0.0f, hann));
-            winAna[n] = s;
-            winSyn[n] = s;
-        }
+;;         fft.reset(new juce::dsp::FFT((int)std::log2((double)fftSize)));
+;;         // sqrt-Hann tables (COLA con hop=N/2)
+;;         winAna.resize(fftSize);
+;;         winSyn.resize(fftSize);
+;;         for (int n = 0; n < fftSize; ++n)
+;;         {
+;;             const float hann = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * (float)n / (float)(fftSize - 1)));
+;;             const float s = std::sqrt(juce::jmax(0.0f, hann));
+;;             winAna[n] = s;
+;;             winSyn[n] = s;
+;;         }
 
-        for (auto &ch : chans)
-        {
-            ch.fifo.assign(fftSize, 0.0f);
-            ch.fifoFill = 0;
-            ch.reim.assign(2 * fftSize, 0.0f);
-            ch.ola.assign(fftSize + 2 * hopSize, 0.0f);
-            ch.olaAvail = 0;
-            ch.olaWrite = 0;
-            ch.inBlock.clear();
-        }
-    }
+;;         for (auto &ch : chans)
+;;         {
+;;             ch.fifo.assign(fftSize, 0.0f);
+;;             ch.fifoFill = 0;
+;;             ch.reim.assign(2 * fftSize, 0.0f);
+;;             ch.ola.assign(fftSize + 2 * hopSize, 0.0f);
+;;             ch.olaAvail = 0;
+;;             ch.olaWrite = 0;
+;;             ch.inBlock.clear();
+;;         }
+;;     }
 
-    void setSampleRate(double sr) { sampleRate = sr; }
-    void setWetDry(float wd) { wetMix.store(juce::jlimit(0.0f, 1.0f, wd)); }
+;;     void setSampleRate(double sr) { sampleRate = sr; }
+;;     void setWetDry(float wd) { wetMix.store(juce::jlimit(0.0f, 1.0f, wd)); }
 
-    void reset()
-    {
-        for (auto &ch : chans)
-        {
-            std::fill(ch.fifo.begin(), ch.fifo.end(), 0.0f);
-            ch.fifoFill = 0;
-            std::fill(ch.reim.begin(), ch.reim.end(), 0.0f);
-            std::fill(ch.ola.begin(), ch.ola.end(), 0.0f);
-            ch.olaAvail = 0;
-            ch.olaWrite = 0;
-            ch.inBlock.clear();
-        }
-    }
+;;     void reset()
+;;     {
+;;         for (auto &ch : chans)
+;;         {
+;;             std::fill(ch.fifo.begin(), ch.fifo.end(), 0.0f);
+;;             ch.fifoFill = 0;
+;;             std::fill(ch.reim.begin(), ch.reim.end(), 0.0f);
+;;             std::fill(ch.ola.begin(), ch.ola.end(), 0.0f);
+;;             ch.olaAvail = 0;
+;;             ch.olaWrite = 0;
+;;             ch.inBlock.clear();
+;;         }
+;;     }
 
-    void process(juce::AudioBuffer<float> &buffer)
-    {
-        const int numCh = juce::jmin(2, buffer.getNumChannels());
-        const int numSm = buffer.getNumSamples();
-        for (int c = 0; c < numCh; ++c)
-            processChannel(chans[c], buffer.getWritePointer(c), numSm);
-    }
+;;     void process(juce::AudioBuffer<float> &buffer)
+;;     {
+;;         const int numCh = juce::jmin(2, buffer.getNumChannels());
+;;         const int numSm = buffer.getNumSamples();
+;;         for (int c = 0; c < numCh; ++c)
+;;             processChannel(chans[c], buffer.getWritePointer(c), numSm);
+;;     }
 
-    int getLatencySamples() const noexcept { return hopSize; }
+;;     int getLatencySamples() const noexcept { return hopSize; }
 
-    unique_ptr<DoTheFFTJob> doTheFFTJob;
-    JX11AudioProcessor *processor;
+;;     unique_ptr<DoTheFFTJob> doTheFFTJob;
+;;     JX11AudioProcessor *processor;
 
-private:
-    struct Channel
-    {
-        std::vector<float> fifo;
-        int fifoFill = 0;
-        std::vector<float> reim; // 2N
-        std::vector<float> ola;
-        int olaAvail = 0;
-        int olaWrite = 0;
-        std::vector<float> inBlock;
-    };
+;; private:
+;;     struct Channel
+;;     {
+;;         std::vector<float> fifo;
+;;         int fifoFill = 0;
+;;         std::vector<float> reim; // 2N
+;;         std::vector<float> ola;
+;;         int olaAvail = 0;
+;;         int olaWrite = 0;
+;;         std::vector<float> inBlock;
+;;     };
 
-    Channel chans[2];
-    std::unique_ptr<juce::dsp::FFT> fft;
-    std::vector<float> winAna, winSyn;
+;;     Channel chans[2];
+;;     std::unique_ptr<juce::dsp::FFT> fft;
+;;     std::vector<float> winAna, winSyn;
 
-    int fftSize = 1024, hopSize = 512;
-    double sampleRate = 48000.0;
-    std::atomic<float> wetMix{1.0f}; // 1=solo wet, 0=solo dry
+;;     int fftSize = 1024, hopSize = 512;
+;;     double sampleRate = 48000.0;
+;;     std::atomic<float> wetMix{1.0f}; // 1=solo wet, 0=solo dry
 
-    inline void processChannel(Channel &ch, float *io, int numSamples)
-    {
-        // snapshot dry
-        if ((int)ch.inBlock.size() < numSamples)
-            ch.inBlock.resize(numSamples);
-        std::memcpy(ch.inBlock.data(), io, sizeof(float) * (size_t)numSamples);
+;;     inline void processChannel(Channel &ch, float *io, int numSamples)
+;;     {
+;;         // snapshot dry
+;;         if ((int)ch.inBlock.size() < numSamples)
+;;             ch.inBlock.resize(numSamples);
+;;         std::memcpy(ch.inBlock.data(), io, sizeof(float) * (size_t)numSamples);
 
-        int pos = 0;
+;;         int pos = 0;
 
-        while (pos < numSamples)
-        {
-            // accumulate input in FIFO
-            const int canCopyIn = juce::jmin(fftSize - ch.fifoFill, numSamples - pos);
-            std::memcpy(ch.fifo.data() + ch.fifoFill, ch.inBlock.data() + pos, sizeof(float) * (size_t)canCopyIn);
-            ch.fifoFill += canCopyIn;
+;;         while (pos < numSamples)
+;;         {
+;;             // accumulate input in FIFO
+;;             const int canCopyIn = juce::jmin(fftSize - ch.fifoFill, numSamples - pos);
+;;             std::memcpy(ch.fifo.data() + ch.fifoFill, ch.inBlock.data() + pos, sizeof(float) * (size_t)canCopyIn);
+;;             ch.fifoFill += canCopyIn;
 
-            // process as many frames as possible
-            while (ch.fifoFill >= fftSize)
-            {
-                // analysis buffer + sqrt-Hann
-                static thread_local std::vector<float> ana;
-                if ((int)ana.size() < fftSize)
-                    ana.resize(fftSize);
-                std::memcpy(ana.data(), ch.fifo.data(), sizeof(float) * (size_t)fftSize);
-                for (int i = 0; i < fftSize; ++i)
-                    ana[i] *= winAna[i];
+;;             // process as many frames as possible
+;;             while (ch.fifoFill >= fftSize)
+;;             {
+;;                 // analysis buffer + sqrt-Hann
+;;                 static thread_local std::vector<float> ana;
+;;                 if ((int)ana.size() < fftSize)
+;;                     ana.resize(fftSize);
+;;                 std::memcpy(ana.data(), ch.fifo.data(), sizeof(float) * (size_t)fftSize);
+;;                 for (int i = 0; i < fftSize; ++i)
+;;                     ana[i] *= winAna[i];
 
-                // pack for JUCE real-only: time-domain in [0..N-1], zero tail
-                std::memcpy(ch.reim.data(), ana.data(), sizeof(float) * (size_t)fftSize);
-                std::memset(ch.reim.data() + fftSize, 0, sizeof(float) * (size_t)fftSize);
+;;                 // pack for JUCE real-only: time-domain in [0..N-1], zero tail
+;;                 std::memcpy(ch.reim.data(), ana.data(), sizeof(float) * (size_t)fftSize);
+;;                 std::memset(ch.reim.data() + fftSize, 0, sizeof(float) * (size_t)fftSize);
 
-                // forward FFT
-                fft->performRealOnlyForwardTransform(ch.reim.data());
+;;                 // forward FFT
+;;                 fft->performRealOnlyForwardTransform(ch.reim.data());
 
-                // ----------------------------------------------------------------
-                // TODO: spectral processing (modifica i bin)
-                //
-                // Layout JUCE (real-only):
-                // reim[0] = DC, reim[1] = Nyquist,
-                // per k=1..N/2-1: reim[2*k] = Re{X[k]}, reim[2*k+1] = Im{X[k]}
-                // reim
-                doTheFFTJob->doTheFFTJob(processor, fftSize, ch.reim);
-                // {
-                //     const double fs = processor->value_info_sampleRate;
-                //     const int half = fftSize/2;
-                //     const int cutoffBin = juce::jlimit(0, half, (int) std::floor (processor->value_cutoff * fftSize / fs + 0.5));
-                //     for (int k = cutoffBin + 1; k < half; ++k) {
-                //         ch.reim[2*k]=0.0f;
-                //         ch.reim[2*k+1]=0.0f;
-                //     }
-                //     ch.reim[1] = 0.0f; // Nyquist
-                // }
-                // Esempio LPF (cut a metà banda):
-                // const int half = fftSize/2; for (int k = half/2 + 1; k < half; ++k) { reim[2*k]=0; reim[2*k+1]=0; }
-                // ----------------------------------------------------------------
+;;                 // ----------------------------------------------------------------
+;;                 // TODO: spectral processing (modifica i bin)
+;;                 //
+;;                 // Layout JUCE (real-only):
+;;                 // reim[0] = DC, reim[1] = Nyquist,
+;;                 // per k=1..N/2-1: reim[2*k] = Re{X[k]}, reim[2*k+1] = Im{X[k]}
+;;                 // reim
+;;                 doTheFFTJob->doTheFFTJob(processor, fftSize, ch.reim);
+;;                 // {
+;;                 //     const double fs = processor->value_info_sampleRate;
+;;                 //     const int half = fftSize/2;
+;;                 //     const int cutoffBin = juce::jlimit(0, half, (int) std::floor (processor->value_cutoff * fftSize / fs + 0.5));
+;;                 //     for (int k = cutoffBin + 1; k < half; ++k) {
+;;                 //         ch.reim[2*k]=0.0f;
+;;                 //         ch.reim[2*k+1]=0.0f;
+;;                 //     }
+;;                 //     ch.reim[1] = 0.0f; // Nyquist
+;;                 // }
+;;                 // Esempio LPF (cut a metà banda):
+;;                 // const int half = fftSize/2; for (int k = half/2 + 1; k < half; ++k) { reim[2*k]=0; reim[2*k+1]=0; }
+;;                 // ----------------------------------------------------------------
 
-                // inverse FFT → time-domain in reim[0..N-1]
-                fft->performRealOnlyInverseTransform(ch.reim.data());
+;;                 // inverse FFT → time-domain in reim[0..N-1]
+;;                 fft->performRealOnlyInverseTransform(ch.reim.data());
 
-                // synthesis buffer (no extra 1/N here; regola se serve per la tua JUCE)
-                static thread_local std::vector<float> syn;
-                if ((int)syn.size() < fftSize)
-                    syn.resize(fftSize);
-                std::memcpy(syn.data(), ch.reim.data(), sizeof(float) * (size_t)fftSize);
+;;                 // synthesis buffer (no extra 1/N here; regola se serve per la tua JUCE)
+;;                 static thread_local std::vector<float> syn;
+;;                 if ((int)syn.size() < fftSize)
+;;                     syn.resize(fftSize);
+;;                 std::memcpy(syn.data(), ch.reim.data(), sizeof(float) * (size_t)fftSize);
 
-                // sqrt-Hann synthesis
-                for (int i = 0; i < fftSize; ++i)
-                    syn[i] *= winSyn[i];
+;;                 // sqrt-Hann synthesis
+;;                 for (int i = 0; i < fftSize; ++i)
+;;                     syn[i] *= winSyn[i];
 
-                // OLA at write offset
-                jassert(ch.olaWrite + fftSize <= (int)ch.ola.size());
-                for (int i = 0; i < fftSize; ++i)
-                    ch.ola[ch.olaWrite + i] += syn[i];
+;;                 // OLA at write offset
+;;                 jassert(ch.olaWrite + fftSize <= (int)ch.ola.size());
+;;                 for (int i = 0; i < fftSize; ++i)
+;;                     ch.ola[ch.olaWrite + i] += syn[i];
 
-                ch.olaAvail += hopSize;
-                ch.olaWrite += hopSize;
+;;                 ch.olaAvail += hopSize;
+;;                 ch.olaWrite += hopSize;
 
-                // shift FIFO by hop
-                std::memmove(ch.fifo.data(), ch.fifo.data() + hopSize, sizeof(float) * (size_t)(fftSize - hopSize));
-                ch.fifoFill -= hopSize;
-            }
+;;                 // shift FIFO by hop
+;;                 std::memmove(ch.fifo.data(), ch.fifo.data() + hopSize, sizeof(float) * (size_t)(fftSize - hopSize));
+;;                 ch.fifoFill -= hopSize;
+;;             }
 
-            // emit wet (available) + dry mix
-            const int remaining = numSamples - pos;
-            int emit = juce::jmin(remaining, ch.olaAvail);
+;;             // emit wet (available) + dry mix
+;;             const int remaining = numSamples - pos;
+;;             int emit = juce::jmin(remaining, ch.olaAvail);
 
-            const float gW = wetMix.load();
-            const float gD = 1.0f - gW;
+;;             const float gW = wetMix.load();
+;;             const float gD = 1.0f - gW;
 
-            if (emit > 0)
-            {
-                for (int i = 0; i < emit; ++i)
-                    io[pos + i] = gW * ch.ola[i] + gD * ch.inBlock[pos + i];
+;;             if (emit > 0)
+;;             {
+;;                 for (int i = 0; i < emit; ++i)
+;;                     io[pos + i] = gW * ch.ola[i] + gD * ch.inBlock[pos + i];
 
-                // compact OLA by 'emit'
-                const int validLen = juce::jlimit(fftSize, (int)ch.ola.size(), (ch.olaWrite - hopSize) + fftSize);
-                std::memmove(ch.ola.data(), ch.ola.data() + emit, sizeof(float) * (size_t)(validLen - emit));
-                std::memset(ch.ola.data() + (validLen - emit), 0, sizeof(float) * (size_t)emit);
+;;                 // compact OLA by 'emit'
+;;                 const int validLen = juce::jlimit(fftSize, (int)ch.ola.size(), (ch.olaWrite - hopSize) + fftSize);
+;;                 std::memmove(ch.ola.data(), ch.ola.data() + emit, sizeof(float) * (size_t)(validLen - emit));
+;;                 std::memset(ch.ola.data() + (validLen - emit), 0, sizeof(float) * (size_t)emit);
 
-                ch.olaWrite -= emit;
-                if (ch.olaWrite < 0)
-                    ch.olaWrite = 0;
-                ch.olaAvail -= emit;
-                pos += emit;
-            }
-            else
-            {
-                // no wet yet → pass dry
-                const int copy = juce::jmin(remaining, canCopyIn);
-                std::memcpy(io + pos, ch.inBlock.data() + pos, sizeof(float) * (size_t)copy);
-                pos += copy;
-            }
-        }
-    }
-};
+;;                 ch.olaWrite -= emit;
+;;                 if (ch.olaWrite < 0)
+;;                     ch.olaWrite = 0;
+;;                 ch.olaAvail -= emit;
+;;                 pos += emit;
+;;             }
+;;             else
+;;             {
+;;                 // no wet yet → pass dry
+;;                 const int copy = juce::jmin(remaining, canCopyIn);
+;;                 std::memcpy(io + pos, ch.inBlock.data() + pos, sizeof(float) * (size_t)copy);
+;;                 pos += copy;
+;;             }
+;;         }
+;;     }
+;; };
 
-class RealPlugin
-{
-public:
-    void ButtonCallback(int num, juce::String name)
-    {
-        std::cout << \"Clicked button: \" << num << \". Name: \" << name << std::endl;
-    }
+;; class RealPlugin
+;; {
+;; public:
+;;     void ButtonCallback(int num, juce::String name)
+;;     {
+;;         std::cout << \"Clicked button: \" << num << \". Name: \" << name << std::endl;
+;;     }
 
-    RealPlugin(JX11AudioProcessor *processor) : processor(processor)
-    {
-        prepare();
-    }
+;;     RealPlugin(JX11AudioProcessor *processor) : processor(processor)
+;;     {
+;;         prepare();
+;;     }
 
-    int TranslateFFTSize()
-    {
-        switch (static_cast<int>(processor->value_fftsize))
-        {
-        case 0:
-            return 256;
-        case 1:
-            return 512;
-        case 2:
-            return 1024;
-        case 3:
-            return 2048;
-        case 4:
-            return 4096;
-        case 5:
-            return 8192;
-        default:
-            return 1024;
-        }
-    }
+;;     int TranslateFFTSize()
+;;     {
+;;         switch (static_cast<int>(processor->value_fftsize))
+;;         {
+;;         case 0:
+;;             return 256;
+;;         case 1:
+;;             return 512;
+;;         case 2:
+;;             return 1024;
+;;         case 3:
+;;             return 2048;
+;;         case 4:
+;;             return 4096;
+;;         case 5:
+;;             return 8192;
+;;         default:
+;;             return 1024;
+;;         }
+;;     }
 
-    void prepare()
-    {
-        stft.processor = processor;
-        stft.doTheFFTJob = make_unique<DoTheFFTJob>();
+;;     void prepare()
+;;     {
+;;         stft.processor = processor;
+;;         stft.doTheFFTJob = make_unique<DoTheFFTJob>();
 
-        oldFFTSize = TranslateFFTSize();
-        stft.setFftSize(oldFFTSize); // 256/512/1024/2048...
-        stft.setSampleRate(processor->value_info_sampleRate);
-        stft.setWetDry(processor->value_wetdry); // per test: solo wet
-        stft.reset();
-        processor->setLatencySamples(stft.getLatencySamples()); // N/2
-    }
+;;         oldFFTSize = TranslateFFTSize();
+;;         stft.setFftSize(oldFFTSize); // 256/512/1024/2048...
+;;         stft.setSampleRate(processor->value_info_sampleRate);
+;;         stft.setWetDry(processor->value_wetdry); // per test: solo wet
+;;         stft.reset();
+;;         processor->setLatencySamples(stft.getLatencySamples()); // N/2
+;;     }
 
-    // In case of resampling
-    void render(juce::dsp::AudioBlock<float> &buffer)
-    {
-    }
+;;     // In case of resampling
+;;     void render(juce::dsp::AudioBlock<float> &buffer)
+;;     {
+;;     }
 
-    void render(juce::AudioBuffer<float> &buffer)
-    {
-        stft.setWetDry(processor->value_wetdry); // per test: solo wet
+;;     void render(juce::AudioBuffer<float> &buffer)
+;;     {
+;;         stft.setWetDry(processor->value_wetdry); // per test: solo wet
 
-        if (oldFFTSize != TranslateFFTSize())
-        {
-            stft.processor = processor;
-            stft.doTheFFTJob.reset();
-            stft.doTheFFTJob = make_unique<DoTheFFTJob>();
+;;         if (oldFFTSize != TranslateFFTSize())
+;;         {
+;;             stft.processor = processor;
+;;             stft.doTheFFTJob.reset();
+;;             stft.doTheFFTJob = make_unique<DoTheFFTJob>();
 
-            oldFFTSize = TranslateFFTSize();
-            stft.setFftSize(oldFFTSize); // 256/512/1024/2048...
-            stft.setSampleRate(processor->value_info_sampleRate);
-            stft.reset();
-            processor->setLatencySamples(stft.getLatencySamples()); // N/2
-        }
-        stft.process(buffer);
-    }
+;;             oldFFTSize = TranslateFFTSize();
+;;             stft.setFftSize(oldFFTSize); // 256/512/1024/2048...
+;;             stft.setSampleRate(processor->value_info_sampleRate);
+;;             stft.reset();
+;;             processor->setLatencySamples(stft.getLatencySamples()); // N/2
+;;         }
+;;         stft.process(buffer);
+;;     }
 
-private:
-    SimpleStftStereo stft;
-    int oldFFTSize = 0;
+;; private:
+;;     SimpleStftStereo stft;
+;;     int oldFFTSize = 0;
 
-    JX11AudioProcessor *processor = nullptr;
-};
-")
+;;     JX11AudioProcessor *processor = nullptr;
+;; };
+;; ")
 
-(define-public CODICE-NON-PER-FFT "
-class RealPlugin
-{
-public:
-    void prepare(double sampleRate)
-    {
-    }
-    RealPlugin(JX11AudioProcessor *processor) : processor(processor)
-    {
-        prepare(processor->value_info_sampleRate);
-    }
+;; (define-public CODICE-NON-PER-FFT "
+;; class RealPlugin
+;; {
+;; public:
+;;     void prepare(double sampleRate)
+;;     {
+;;     }
+;;     RealPlugin(JX11AudioProcessor *processor) : processor(processor)
+;;     {
+;;         prepare(processor->value_info_sampleRate);
+;;     }
 
-    void ButtonCallback(int num, juce::String name) {
-        std::cout << \"Clicked button: \" << num << \". Name: \" << name << std::endl;
-    }
+;;     void ButtonCallback(int num, juce::String name) {
+;;         std::cout << \"Clicked button: \" << num << \". Name: \" << name << std::endl;
+;;     }
 
-    ~RealPlugin() = default;
+;;     ~RealPlugin() = default;
 
-    void render(juce::AudioBuffer<float> &buffer) {
-    }
+;;     void render(juce::AudioBuffer<float> &buffer) {
+;;     }
 
-    //In case of resampling
-    void render(juce::dsp::AudioBlock<float> &buffer) {
-    }
+;;     //In case of resampling
+;;     void render(juce::dsp::AudioBlock<float> &buffer) {
+;;     }
 
-private:
-    JX11AudioProcessor *processor = nullptr;
-};
-")
+;; private:
+;;     JX11AudioProcessor *processor = nullptr;
+;; };
+;; ")
 
 ;; (define-public CODICE-PER-PALETTE
 ;;   "
@@ -694,6 +695,6 @@ private:
 ;;     addAndMakeVisible(paletteSelector);
 ;; ")
 
-(export CODICE-PER-FFT)
-(export CODICE-PER-NON-FFT)
+;; (export CODICE-PER-FFT)
+;; (export CODICE-PER-NON-FFT)
 (export CODICE-PER-PALETTE)
