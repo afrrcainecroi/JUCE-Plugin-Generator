@@ -7,6 +7,11 @@
 	    generate-footer-timer-code
 	    generate-timer-code
 	    generate-dsp-runtime-members-code
+	    generate-oversampling-prepare-code
+	    generate-oversampling-release-code
+	    generate-oversampling-runtime-members-code
+	    oversampling-model
+	    generate-process-oversampling-compensation
 	    ))
 
 (define-public (generate-process-code)
@@ -16,6 +21,7 @@
    (generate-process-input-meter)
    (generate-process-wetdry-prefix)
    (generate-process-dsp)
+   (generate-process-oversampling-compensation)   
    (generate-process-wetdry-postfix)
    (generate-process-output-gain)
    (generate-process-output-meter)
@@ -25,14 +31,26 @@
   (let ((model (find-component-by-role 'bypass)))
     (if model
         (let ((ref (assoc-ref model 'processor-reference)))
-          (format #f
-"    // HARD BYPASS
+	  (if (oversampling-model)
+	      (format #f
+		      
+		  "    // HARD BYPASS
+    if (value_~a >= 0.5f) {
+        juce::dsp::AudioBlock<float> block(buffer);
+        juce::dsp::ProcessContextReplacing<float>
+            context(block);
+        oversamplingBypassDelay.process(context);
+        return;
+    }
+" ref)
+	      (format #f
+	      "    // HARD BYPASS
     if (value_~a >= 0.5f)
         return;
 
 "
-                  ref))
-        "")))
+              ref)))
+          "")))
 
 
 (define (meter-peak-var model)
@@ -69,6 +87,74 @@
 (define (generate-process-output-meter)
   (generate-process-meter 'output-meter "OUTPUT METER"))
 
+(define (generate-process-dsp-body)
+  (let ((model (oversampling-model)))
+    (if model
+        (let ((ref (assoc-ref model 'processor-reference)))
+          (format #f
+"    switch (static_cast<int>(value_~a))
+    {
+        case 0:
+        {
+            // Oversampling OFF
+            myplugin->render(buffer);
+            break;
+        }
+
+        case 1:
+        {
+            // 2x
+            juce::dsp::AudioBlock<float> block(buffer);
+
+            auto oversampledBlock =
+                oversampling2x->processSamplesUp(block);
+
+            myplugin->render(oversampledBlock);
+
+            oversampling2x->processSamplesDown(block);
+            break;
+        }
+
+        case 2:
+        {
+            // 4x
+            juce::dsp::AudioBlock<float> block(buffer);
+
+            auto oversampledBlock =
+                oversampling4x->processSamplesUp(block);
+
+            myplugin->render(oversampledBlock);
+
+            oversampling4x->processSamplesDown(block);
+            break;
+        }
+
+        case 3:
+        {
+            // 8x
+            juce::dsp::AudioBlock<float> block(buffer);
+
+            auto oversampledBlock =
+                oversampling8x->processSamplesUp(block);
+
+            myplugin->render(oversampledBlock);
+
+            oversampling8x->processSamplesDown(block);
+            break;
+        }
+
+        default:
+            myplugin->render(buffer);
+            break;
+    }
+
+"
+                  ref))
+        "
+    myplugin->render(buffer);
+
+")))
+
 (define (generate-process-dsp)
   (let ((dsp-bypass
          (find-component-by-role 'dsp-bypass)))
@@ -77,20 +163,23 @@
         (let ((ref
                (assoc-ref dsp-bypass
                           'processor-reference)))
-          (format #f
+          (string-append
+           (format #f
 "    // DSP
     if (value_~a < 0.5f)
     {
-        myplugin->render(buffer);
-    }
-
 "
-                  ref))
+                   ref)
 
-        "    // DSP
-    myplugin->render(buffer);
+           (generate-process-dsp-body)
 
-")))
+           "    }\n\n"))
+
+        (string-append
+         "    // DSP\n"
+         (generate-process-dsp-body)))))
+
+
 
 (define (generate-process-output-gain)
   (let ((model (role-model 'output-gain)))
@@ -283,13 +372,25 @@
       ""))
 
 (define (generate-process-wetdry-postfix)
-  (let ((model (role-model 'wet-dry)))
-    (if model
-        (let* ((ref (assoc-ref model 'processor-reference))
-               (min (assoc-ref model 'min))
-               (max (assoc-ref model 'max)))
-          (format #f
-"    // WET / DRY MIX
+  (string-append
+   (if (oversampling-model)
+       "
+        juce::dsp::AudioBlock<float> dryBlock(dryBuffer);
+
+        juce::dsp::ProcessContextReplacing<float>
+            dryContext(dryBlock);
+
+        oversamplingDryDelay.process(dryContext);
+
+"
+       "")
+   (let ((model (role-model 'wet-dry)))
+     (if model
+         (let* ((ref (assoc-ref model 'processor-reference))
+		(min (assoc-ref model 'min))
+		(max (assoc-ref model 'max)))
+           (format #f
+		   "    // WET / DRY MIX
     {
         const float wetMix =
             juce::jlimit(
@@ -319,8 +420,8 @@
     }
 
 "
-                  ref min max min))
-        "")))
+                   ref min max min))
+         ""))))
 
 (define-public (generate-footer-timer-code)
   (let ((model (find-component-by-type 'link)))
@@ -413,4 +514,204 @@
    (if (role-model 'scope)
        (format #f
                "std::array<std::atomic<float>, 128> scopeFifo {};~%std::atomic<int> scopeWriteIdx { 0 };~%")
-       "")))
+       "")
+   (generate-oversampling-runtime-members-code)
+   ))
+
+(define (oversampling-model)
+  (role-model 'oversampling))
+
+(define-public (generate-oversampling-runtime-members-code)
+  (if (oversampling-model)
+      (string-append
+       "std::unique_ptr<juce::dsp::Oversampling<float>> oversampling2x;\n"
+       "std::unique_ptr<juce::dsp::Oversampling<float>> oversampling4x;\n"
+       "std::unique_ptr<juce::dsp::Oversampling<float>> oversampling8x;\n"
+       "\n"
+       "float oversamplingLatency2x { 0.0f };\n"
+       "float oversamplingLatency4x { 0.0f };\n"
+       "float oversamplingLatency8x { 0.0f };\n"
+       "int oversamplingCommonLatency { 0 };\n"
+       "\n"
+       "juce::dsp::DelayLine<float,\n"
+       "    juce::dsp::DelayLineInterpolationTypes::None>\n"
+       "    oversamplingCompensationDelay;\n"
+       "\n"
+       "juce::dsp::DelayLine<float,\n"
+       "    juce::dsp::DelayLineInterpolationTypes::None>\n"
+       "    oversamplingDryDelay;\n"
+       "\n"
+       "juce::dsp::DelayLine<float,\n"
+       "    juce::dsp::DelayLineInterpolationTypes::None>\n"
+       "    oversamplingBypassDelay;\n")
+      ""))
+
+(define-public (generate-oversampling-prepare-code)
+  (if (oversampling-model)
+      "
+    oversampling2x =
+        std::make_unique<juce::dsp::Oversampling<float>>(
+            getTotalNumInputChannels(),
+            1,
+            juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
+            false,
+            true);
+
+    oversampling4x =
+        std::make_unique<juce::dsp::Oversampling<float>>(
+            getTotalNumInputChannels(),
+            2,
+            juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
+            false,
+            true);
+
+    oversampling8x =
+        std::make_unique<juce::dsp::Oversampling<float>>(
+            getTotalNumInputChannels(),
+            3,
+            juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
+            false,
+            true);
+
+    oversampling2x->initProcessing(
+        static_cast<size_t>(samplesPerBlock));
+
+    oversampling4x->initProcessing(
+        static_cast<size_t>(samplesPerBlock));
+
+    oversampling8x->initProcessing(
+        static_cast<size_t>(samplesPerBlock));
+
+    oversampling2x->reset();
+    oversampling4x->reset();
+    oversampling8x->reset();
+
+    oversamplingLatency2x =
+        oversampling2x->getLatencyInSamples();
+
+    oversamplingLatency4x =
+        oversampling4x->getLatencyInSamples();
+
+    oversamplingLatency8x =
+        oversampling8x->getLatencyInSamples();
+
+    oversamplingCommonLatency =
+        juce::roundToInt(
+            juce::jmax(
+                oversamplingLatency2x,
+                juce::jmax(
+                    oversamplingLatency4x,
+                    oversamplingLatency8x)));
+
+    setLatencySamples(oversamplingCommonLatency);
+
+    juce::dsp::ProcessSpec oversamplingDelaySpec;
+    oversamplingDelaySpec.sampleRate = sampleRate;
+    oversamplingDelaySpec.maximumBlockSize =
+        static_cast<juce::uint32>(samplesPerBlock);
+    oversamplingDelaySpec.numChannels =
+        static_cast<juce::uint32>(
+            getTotalNumInputChannels());
+
+    const int maximumDelay =
+        juce::jmax(1, oversamplingCommonLatency + 1);
+
+    oversamplingCompensationDelay
+        .setMaximumDelayInSamples(maximumDelay);
+
+    oversamplingDryDelay
+        .setMaximumDelayInSamples(maximumDelay);
+
+    oversamplingBypassDelay
+        .setMaximumDelayInSamples(maximumDelay);
+
+    oversamplingCompensationDelay.prepare(
+        oversamplingDelaySpec);
+
+    oversamplingDryDelay.prepare(
+        oversamplingDelaySpec);
+
+    oversamplingBypassDelay.prepare(
+        oversamplingDelaySpec);
+
+    oversamplingCompensationDelay.reset();
+    oversamplingDryDelay.reset();
+    oversamplingBypassDelay.reset();
+
+    oversamplingDryDelay.setDelay(
+        static_cast<float>(
+            oversamplingCommonLatency));
+
+    oversamplingBypassDelay.setDelay(
+        static_cast<float>(
+            oversamplingCommonLatency));
+"
+      ""))
+
+(define-public (generate-oversampling-release-code)
+  (if (oversampling-model)
+      "
+    oversamplingCompensationDelay.reset();
+    oversamplingDryDelay.reset();
+    oversamplingBypassDelay.reset();
+
+    oversampling2x.reset();
+    oversampling4x.reset();
+    oversampling8x.reset();
+"
+      ""))
+
+(define (generate-process-oversampling-compensation)
+  (let ((model (oversampling-model)))
+    (if model
+        (let ((ref (assoc-ref model 'processor-reference)))
+          (format #f
+		  "    // OVERSAMPLING LATENCY COMPENSATION
+    {
+        const int oversamplingMode =
+            juce::jlimit(
+                0,
+                3,
+                static_cast<int>(value_~a));
+
+        float currentLatency = 0.0f;
+
+        switch (oversamplingMode)
+        {
+            case 1:
+                currentLatency = oversamplingLatency2x;
+                break;
+
+            case 2:
+                currentLatency = oversamplingLatency4x;
+                break;
+
+            case 3:
+                currentLatency = oversamplingLatency8x;
+                break;
+
+            default:
+                currentLatency = 0.0f;
+                break;
+        }
+
+        const float compensation =
+            static_cast<float>(
+                oversamplingCommonLatency)
+            - currentLatency;
+
+        oversamplingCompensationDelay.setDelay(
+            juce::jmax(0.0f, compensation));
+
+        juce::dsp::AudioBlock<float> block(buffer);
+
+        juce::dsp::ProcessContextReplacing<float>
+            context(block);
+
+        oversamplingCompensationDelay.process(
+            context);
+    }
+
+"
+                  ref))
+        "")))

@@ -201,6 +201,9 @@
 	       generate-footer-timer-code
 	       generate-timer-code
 	       generate-dsp-runtime-members-code
+	       generate-oversampling-prepare-code
+	       generate-oversampling-release-code
+	       generate-process-oversampling-compensation
 	       )
   )
 

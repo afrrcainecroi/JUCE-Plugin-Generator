@@ -105,10 +105,10 @@
   (reset-cpp-identifiers!)
   (reset-components!)
 
-(set! *OVERSAMPLING-ENABLED* #f)
-  (set! *OVERSAMPLING-FILTER* 'filterHalfBandPolyphaseIIR)
-  (set! *OVERSAMPLING-isMaxQuality* #f)
-  (set! *OVERSAMPLING-useIntegerLatency* #t)
+  ;; (set! *OVERSAMPLING-ENABLED* #f)
+  ;; (set! *OVERSAMPLING-FILTER* 'filterHalfBandPolyphaseIIR)
+  ;; (set! *OVERSAMPLING-isMaxQuality* #f)
+  ;; (set! *OVERSAMPLING-useIntegerLatency* #t)
   (interface-definitions dst-folder new-name)
 
   ;; Materializza le RESOURCE dichiarate dalla DSL.
@@ -166,6 +166,13 @@
   (AppendStringTo  *DSP_RUNTIME_MEMBERS*
 		   "\n"
 		   (generate-dsp-runtime-members-code))
+  
+  (AppendStringTo *OVERSAMPLING_PPC*
+                  (generate-oversampling-prepare-code))
+
+  (AppendStringTo *OVERSAMPLING_PPCRR*
+                  (generate-oversampling-release-code))
+  
 
   ;;
   ;;Genera i codici c++ per PluginEditor.cpp
@@ -178,49 +185,49 @@
 	(Synth.h (string-append dst-folder "/Source/" "Synth.h"))
 	)
     ;;
-    (set! *OVERSAMPLING_PPC* (if *OVERSAMPLING-ENABLED*
-				 (begin
-				   (f-str "
-    oversampling = std::make_unique<juce::dsp::Oversampling<float>>(
-        getTotalNumInputChannels(),
-        oversampling_factor,
-        juce::dsp::Oversampling<float>::FilterType::${(symbol->string *OVERSAMPLING-FILTER*)}
-        ${(if *OVERSAMPLING-isMaxQuality* \"true\" \"false\")}
-        ${(if *OVERSAMPLING-useIntegerLatency* \"true\" \"false\")});
-    oversampling->reset();
-    oversampling->initProcessing(static_cast<size_t>(samplesPerBlock));\n\n"))
-				 (begin
-				   "\n\n")))
+    ;; (set! *OVERSAMPLING_PPC* (if *OVERSAMPLING-ENABLED*
+    ;; 				 (begin
+    ;; 				   (f-str "
+    ;; oversampling = std::make_unique<juce::dsp::Oversampling<float>>(
+    ;;     getTotalNumInputChannels(),
+    ;;     oversampling_factor,
+    ;;     juce::dsp::Oversampling<float>::FilterType::${(symbol->string *OVERSAMPLING-FILTER*)}
+    ;;     ${(if *OVERSAMPLING-isMaxQuality* \"true\" \"false\")}
+    ;;     ${(if *OVERSAMPLING-useIntegerLatency* \"true\" \"false\")});
+    ;; oversampling->reset();
+    ;; oversampling->initProcessing(static_cast<size_t>(samplesPerBlock));\n\n"))
+    ;; 				 (begin
+    ;; 				   "\n\n")))
     ;;
-    (set! *OVERSAMPLING_PPCRR* (if *OVERSAMPLING-ENABLED*
-				   (begin
-				     (f-str "
-    oversampling.reset();
-"))
-				   (begin
-				     "\n\n")))
+    ;; (set! *OVERSAMPLING_PPCRR* (if *OVERSAMPLING-ENABLED*
+    ;; 				   (begin
+    ;; 				     (f-str "
+    ;;     oversampling.reset();
+    ;; "))
+    ;; 				   (begin
+    ;; 				     "\n\n")))
     ;;
-    (set! *OVERSAMPLING_PPCPB* (if *OVERSAMPLING-ENABLED*
-				   (begin
-				     (f-str "
-    juce::dsp::AudioBlock<float> block(buffer);
-    auto oversampledBlock = oversampling->processSamplesUp(block);
+    ;; (set! *OVERSAMPLING_PPCPB* (if *OVERSAMPLING-ENABLED*
+    ;; 				   (begin
+    ;; 				     (f-str "
+    ;;     juce::dsp::AudioBlock<float> block(buffer);
+    ;;     auto oversampledBlock = oversampling->processSamplesUp(block);
 
-    // Apply nonlinear distortion to each sample
-    myplugin->render(oversampledBlock);
+    ;;     // Apply nonlinear distortion to each sample
+    ;;     myplugin->render(oversampledBlock);
 
-    oversampling->processSamplesDown(block);
-")) (begin
-				     "\n	myplugin->render(buffer);\n\n")))
+    ;;     oversampling->processSamplesDown(block);
+    ;; ")) (begin
+    ;; 				     "\n	myplugin->render(buffer);\n\n")))
     ;;
-    (set! *OVERSAMPLING_PPH* (if *OVERSAMPLING-ENABLED*
-				 (begin
-				   (f-str "
-	std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
-	size_t oversampling_factor=${*OVERSAMPLING-ENABLED*};
-" ))
-				 (begin
-				   "\n\n")))
+    ;; (set! *OVERSAMPLING_PPH* (if *OVERSAMPLING-ENABLED*
+    ;; 				 (begin
+    ;; 				   (f-str "
+    ;; 	std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
+    ;; 	size_t oversampling_factor=${*OVERSAMPLING-ENABLED*};
+    ;; " ))
+    ;; 				 (begin
+    ;; 				   "\n\n")))
     ;;
     ;;Il codice per la FFT o per NON FFT, ma solo se sto generando la prima volta. Se
     ;;già esiste, non fare nulla!
@@ -1766,22 +1773,23 @@ var id var))
   #:row-span 9
   #:col-span 3)
 
-
 (make <selector>
-  #:id "Test Processing Mode"
+  #:id "Oversampling"
+  #:role 'oversampling
 
-  #:parameter-id "testProcessingMode"
-  #:parameter-name "Test Processing Mode"
-  #:processor-reference "testProcessingMode"
+  #:parameter-id "oversampling"
+  #:parameter-name "Oversampling"
+  #:processor-reference "oversampling"
   #:version-hint 1
 
-  #:items '("Off" "Low" "Medium" "High")
-  #:default-index 3
+  #:items '("Off" "2x" "4x" "8x")
+  #:default-index 1
 
   #:row 12
   #:col 8
-  #:row-span 2
-  #:col-span 8)
+  #:row-span 1
+  #:col-span 4)
+
 
   )
 
