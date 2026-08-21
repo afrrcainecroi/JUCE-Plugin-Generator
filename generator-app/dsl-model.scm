@@ -39,7 +39,15 @@
 (new-class <selector> (<component>)
 	   (
 	    (items '())
+	    ;; ID JUCE ComboBox: 0 = nessuna selezione, 1..N = elementi
 	    (default-index 0)
+
+	    ;; binding DAW/APVTS opzionale
+	    (parameter-id #f)
+	    (parameter-name #f)
+	    (processor-reference #f)
+	    (version-hint 1)
+
 	    (justification 'centred-left)
 	    (tooltip "")
 	    (enabled #t)
@@ -348,7 +356,7 @@
                #:id
                (string-append id " Selector")
                #:items *kinetic-palettes*
-               ;; selector usa indice 0-based
+               ;; selector usa indice 1-based
                #:default-index default-theme
                #:row row-selector
                #:col col-selector
@@ -442,7 +450,8 @@
     (rowSpan   . ,(component:row-span c))
     (colSpan   . ,(component:col-span c))
     (margin-tb . ,(component:margin-tb c))
-    (margin-lr . ,(component:margin-lr c))))
+    (margin-lr . ,(component:margin-lr c))
+    ))
 
 (define-method (component->model (b <button>))
   (append
@@ -491,6 +500,12 @@
    (next-method)
    `((items         . ,(selector:items c))
      (default-index . ,(selector:default-index c))
+
+     (parameter-id        . ,(selector:parameter-id c))
+     (parameter-name      . ,(selector:parameter-name c))
+     (processor-reference . ,(selector:processor-reference c))
+     (version-hint        . ,(selector:version-hint c))
+     
      (justification               . ,(selector:justification c))
      (tooltip                     . ,(selector:tooltip c))
      (enabled                     . ,(selector:enabled c))

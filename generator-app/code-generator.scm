@@ -66,6 +66,10 @@
                <selector>
                selector:items
                selector:default-index
+	       selector:parameter-id
+	       selector:parameter-name
+	       selector:processor-reference
+	       selector:version-hint
                <palette-selector>
                <button>
                button:text

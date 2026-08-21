@@ -54,6 +54,11 @@
 (define-method (validate-component! (c <selector>))
   (let ((items (selector:items c))
         (index (selector:default-index c)))
+
+    ;; ----------------------------------------------------------
+    ;; Validazioni generali del selector
+    ;; ----------------------------------------------------------
+
     (unless (list? items)
       (error "Selector items must be a list"
              (component:id c)))
@@ -65,12 +70,45 @@
       (error "Selector default-index must be an integer"
              (component:id c)
              index))
-    (when (and (not (null? items))
-               (or (< index 0)
-                   (>= index (length items))))
+    (when (or (< index 0)
+              (> index (length items)))
       (error "Selector default-index outside items range"
              (component:id c)
              index))
+
+    ;; ----------------------------------------------------------
+    ;; Validazioni aggiuntive se il selector è parameterized
+    ;; ----------------------------------------------------------
+    (let ((parameter-id (selector:parameter-id c)))
+      (when parameter-id
+
+        (when (null? items)
+          (error "Parameterized selector requires at least one item"
+                 (component:id c)))
+
+        (unless (and (string? parameter-id)
+                     (not (string-null? parameter-id)))
+          (error "Parameterized selector requires parameter-id"
+                 (component:id c)))
+
+        (unless (and (string? (selector:parameter-name c))
+                     (not (string-null?
+                           (selector:parameter-name c))))
+          (error "Parameterized selector requires parameter-name"
+                 (component:id c)))
+
+        (unless (and (string? (selector:processor-reference c))
+                     (not (string-null?
+                           (selector:processor-reference c))))
+          (error "Parameterized selector requires processor-reference"
+                 (component:id c)))
+
+        ;; AudioParameterChoice deve avere una scelta reale.
+        ;; 0 per ComboBox significa "nothing selected".
+        (when (= index 0)
+          (error "Parameterized selector requires default-index >= 1"
+                 (component:id c)))))
+
     #t))
 
 (define-method (validate-component! (s <slider>))

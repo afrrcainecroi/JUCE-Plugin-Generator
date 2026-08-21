@@ -255,22 +255,17 @@
               "std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> ~aAttachment;~%"
               var))
 
+     ((selector-parameter-model? model)
+      (format #f
+              "std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> ~aAttachment;~%"
+              var))
+
      ((slider-parameter-type? type)
       (format #f
               "std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> ~aAttachment;~%"
               var))
 
      (else ""))
-    ;; (case type
-    ;;   ((bypass-switch)
-    ;;    (format #f
-    ;; 	       "std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> ~aAttachment;~%"
-    ;;            var))
-    ;;   ((rotary-slider linear-slider)
-    ;;    (format #f
-    ;;            "std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> ~aAttachment;~%"
-    ;;            var))
-    ;;   (else ""))
     ))
 
 (define-method (model->attachment-code (model <list>))
@@ -281,7 +276,7 @@
     (cond
      ((button-parameter-type? type)
       (format #f
-"~aAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+	      "~aAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
     ap.parameters,
     \"~a\",
     ~a
@@ -290,9 +285,20 @@
               (cpp-string parameter-id)
               var))
 
+     ((selector-parameter-model? model)
+      (format #f
+	      "~aAttachment =
+    std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        ap.parameters,
+        \"~a\",
+        ~a);~%"
+              var
+              (cpp-string parameter-id)
+              var))
+     
      ((slider-parameter-type? type)
       (format #f
-"~aAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+	      "~aAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
     ap.parameters,
     \"~a\",
     ~a
@@ -314,7 +320,7 @@
     (cond
      ((button-parameter-type? type)
       (format #f
-"params.push_back(
+	      "params.push_back(
     std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID { \"~a\", ~a },
         \"~a\",
@@ -324,9 +330,29 @@
               (cpp-string parameter-name)
               (bool->cpp default-state)))
 
+     ((selector-parameter-model? model)
+      (let ((items
+             (assoc-ref model 'items))
+	    (default-index
+              (assoc-ref model 'default-index)))
+	(format #f
+		"params.push_back(
+    std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { \"~a\", ~a },
+        \"~a\",
+        ~a,
+        ~a));~%"
+		(cpp-string parameter-id)
+		version-hint
+		(cpp-string parameter-name)
+		(choice-items->cpp items)
+
+		;; DSL/ComboBox 1-based -> AudioParameterChoice 0-based
+		(- default-index 1))))
+     
      ((slider-parameter-type? type)
       (format #f
-"params.push_back(
+	      "params.push_back(
     std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID { \"~a\", ~a },
         \"~a\",
@@ -343,8 +369,8 @@
 (define-method (model->dparams-code (model <list>))
   (let ((type      (assoc-ref model 'type))
         (reference (assoc-ref model 'processor-reference)))
-
-    (if (parameter-component-type? type)
+    (if (parameter-component-model? model)
+    ;; (if (parameter-component-type? type)
         (format #f
 "std::atomic<float>* param_~a = nullptr;
 float value_~a;~%"
@@ -357,7 +383,8 @@ float value_~a;~%"
         (reference    (assoc-ref model 'processor-reference))
         (parameter-id (assoc-ref model 'parameter-id)))
 
-    (if (parameter-component-type? type)
+    (if (parameter-component-model? model)
+    ;; (if (parameter-component-type? type)
         (format #f
 "param_~a = parameters.getRawParameterValue(\"~a\");~%"
                 reference
@@ -368,7 +395,8 @@ float value_~a;~%"
   (let ((type      (assoc-ref model 'type))
         (reference (assoc-ref model 'processor-reference)))
 
-    (if (parameter-component-type? type)
+    (if (parameter-component-model? model)
+    ;; (if (parameter-component-type? type)
         (format #f
 "value_~a = param_~a->load();~%"
                 reference
@@ -376,11 +404,12 @@ float value_~a;~%"
         "")))
 
 (define-method (model->destroy-code (model <list>))
-  (let ((type (assoc-ref model 'type))
-        (var  (assoc-ref model 'var)))
-    (case type
-      ((bypass-switch rotary-slider linear-slider)
-       (format #f
-"~aAttachment.reset();~%"
-               var))
-      (else ""))))
+  "")
+  ;; (let ((type (assoc-ref model 'type))
+  ;;       (var  (assoc-ref model 'var)))
+  ;;   (case type
+  ;;     ((bypass-switch rotary-slider linear-slider)
+  ;;      (format #f
+  ;; 	       "~aAttachment.reset();~%"
+  ;;              var))
+  ;;     (else ""))))

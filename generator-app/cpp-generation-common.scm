@@ -1,23 +1,26 @@
 (define-module (generator-app cpp-generation-common)
   #:use-module (ice-9 format)
   #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-13)
   #:export (
-	    ;;slider-properties->cpp
-            slider-normalisable-range->cpp
-            meter-properties->cpp
-            scope-properties->cpp
-            palette-selector-callback->cpp
-            selector-constructor-code
-            slider-scale->cpp
-            bool->cpp
-            slider-kinetic-properties->cpp
-            rotary-kinetic-properties->cpp
-            tick-labels->cpp
-            cpp-string
-            justification->cpp
-            selector-items->cpp
-	    font-style->cpp
-	    ))
+	  ;;slider-properties->cpp
+          slider-normalisable-range->cpp
+          meter-properties->cpp
+          scope-properties->cpp
+          palette-selector-callback->cpp
+          selector-constructor-code
+          slider-scale->cpp
+          bool->cpp
+          slider-kinetic-properties->cpp
+          rotary-kinetic-properties->cpp
+          tick-labels->cpp
+          cpp-string
+          justification->cpp
+          selector-items->cpp
+	  font-style->cpp
+	  choice-items->cpp
+	    
+	  ))
 
 (define (error message . args)
   (scm-error 'misc-error
@@ -586,4 +589,13 @@
                  (cpp-string tooltip))
          ""))))
 
-
+(define-public (choice-items->cpp items)
+  (string-append
+   "juce::StringArray { "
+   (string-join
+    (map
+     (lambda (item)
+       (format #f "\"~a\"" (cpp-string item)))
+     items)
+    ", ")
+   " }"))

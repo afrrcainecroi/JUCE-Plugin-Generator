@@ -21,7 +21,11 @@
             parameter-component-type?
             processor-param-var
             processor-value-var
-            processor-reference))
+            processor-reference
+	    selector-parameter-model?
+	    parameter-component-model?
+
+	    ))
 
 (define *unique-component-roles*
   '(input-gain
@@ -143,3 +147,15 @@
       (unless var
         (error "Registered component without C++ identifier" registered))
       var)))
+
+(define (selector-parameter-model? model)
+  (and
+   (memq (assoc-ref model 'type)
+         '(selector palette-selector))
+   (assoc-ref model 'parameter-id)))
+
+(define (parameter-component-model? model)
+  (or
+   (parameter-component-type?
+    (assoc-ref model 'type))
+   (selector-parameter-model? model)))

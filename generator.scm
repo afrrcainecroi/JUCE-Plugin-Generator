@@ -1767,6 +1767,22 @@ var id var))
   #:col-span 3)
 
 
+(make <selector>
+  #:id "Test Processing Mode"
+
+  #:parameter-id "testProcessingMode"
+  #:parameter-name "Test Processing Mode"
+  #:processor-reference "testProcessingMode"
+  #:version-hint 1
+
+  #:items '("Off" "Low" "Medium" "High")
+  #:default-index 3
+
+  #:row 12
+  #:col 8
+  #:row-span 2
+  #:col-span 8)
+
   )
 
 (define-public (hard-reload-project)
