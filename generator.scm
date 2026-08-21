@@ -1790,6 +1790,22 @@ var id var))
   #:row-span 1
   #:col-span 4)
 
+(make <selector>
+  #:id "FFT Size"
+  #:role 'fft-size
+
+  #:parameter-id "fftSize"
+  #:parameter-name "FFT Size"
+  #:processor-reference "fftSize"
+  #:version-hint 1
+
+  #:items '("256" "512" "1024" "2048" "4096" "8192")
+  #:default-index 3
+
+  #:row 10
+  #:col 18
+  #:row-span 1
+  #:col-span 4)
 
   )
 

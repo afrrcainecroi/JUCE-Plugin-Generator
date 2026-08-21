@@ -203,7 +203,7 @@
 	       generate-dsp-runtime-members-code
 	       generate-oversampling-prepare-code
 	       generate-oversampling-release-code
-	       generate-process-oversampling-compensation
+	       ;;generate-process-oversampling-compensation
 	       )
   )
 
@@ -303,24 +303,31 @@
 ;;                reference))
 ;;       (else ""))))
 
-(define (generate-oversampling-prepare-code)
+(define-public (generate-oversampling-prepare-code)
   (if (role-present? 'oversampling)
       "    // OVERSAMPLING
+const auto processingChannels =
+    static_cast<juce::uint32>(
+        juce::jmax(
+            1,
+            juce::jmax(
+                getTotalNumInputChannels(),
+                getTotalNumOutputChannels())));
     oversampling2x =
         std::make_unique<juce::dsp::Oversampling<float>>(
-            getTotalNumInputChannels(),
+            static_cast<size_t>(processingChannels),
             1,
             juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR);
 
     oversampling4x =
         std::make_unique<juce::dsp::Oversampling<float>>(
-            getTotalNumInputChannels(),
+            static_cast<size_t>(processingChannels),
             2,
             juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR);
 
     oversampling8x =
         std::make_unique<juce::dsp::Oversampling<float>>(
-            getTotalNumInputChannels(),
+            static_cast<size_t>(processingChannels),
             3,
             juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR);
 

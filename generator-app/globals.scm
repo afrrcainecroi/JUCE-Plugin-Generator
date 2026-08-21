@@ -158,6 +158,7 @@
     IMAGE_RESOURCES
     TIMER
     DSP_RUNTIME_MEMBERS
+    FFT_INFRASTRUCTURE
     ))
 ;;
 ;; (define-public *OVERSAMPLING_PPC* "")
