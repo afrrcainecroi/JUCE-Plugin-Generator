@@ -11,7 +11,13 @@
 	    generate-oversampling-release-code
 	    generate-oversampling-runtime-members-code
 	    oversampling-model
-	    ;;generate-process-oversampling-compensation
+	    generate-fft-infrastructure-code
+	    generate-fft-runtime-members-code
+	    generate-myplugin-fft-members-code
+
+	    generate-myplugin-fft-init-code
+	    generate-myplugin-render-buffer-code
+	    generate-myplugin-render-block-code
 	    ))
 
 (define-public (generate-process-code)
@@ -76,10 +82,39 @@
   (generate-process-meter 'output-meter "OUTPUT METER"))
 
 (define (generate-process-dsp-body)
-  (let ((model (oversampling-model)))
-    (if model
-        (let ((ref (assoc-ref model 'processor-reference)))
-          (format #f
+
+  (let ((oversampling
+         (oversampling-model))
+        (fft
+         (fft-model)))
+
+    (string-append
+
+     ;; ==========================================================
+     ;; FFT / SPECTRAL PROCESSING
+     ;;
+     ;; Sempre sul buffer originale, PRIMA dell'oversampling.
+     ;; ==========================================================
+
+     (if fft
+         "
+    // FFT / SPECTRAL DSP
+    myplugin->processFFT(buffer);
+
+"
+         "")
+
+     ;; ==========================================================
+     ;; TIME DOMAIN DSP / OVERSAMPLING
+     ;; ==========================================================
+
+     (if oversampling
+
+         (let ((ref
+                (assoc-ref oversampling
+                           'processor-reference)))
+
+           (format #f
 "    switch (static_cast<int>(value_~a))
     {
         case 0:
@@ -137,11 +172,12 @@
     }
 
 "
-                  ref))
-        "
+                   ref))
+
+         "
     myplugin->render(buffer);
 
-")))
+"))))
 
 (define (generate-process-dsp)
   (let ((dsp-bypass
@@ -488,9 +524,11 @@
          ""))
 
    (if (role-model 'scope)
-       (format #f
-               "std::array<std::atomic<float>, 128> scopeFifo {};~%std::atomic<int> scopeWriteIdx { 0 };~%")
+       "std::array<std::atomic<float>, 128> scopeFifo {};
+std::atomic<int> scopeWriteIdx { 0 };
+"
        "")
+
    (generate-oversampling-runtime-members-code)
    ))
 
@@ -567,3 +605,625 @@
       ""))
 
 
+(define (fft-model)
+  (role-model 'fft-size))
+
+(define (fft-enabled?)
+  (if (fft-model) #t #f))
+
+(define-public (generate-fft-infrastructure-code)
+  (let ((model (fft-model)))
+    (if model
+        (let ((ref (assoc-ref model 'processor-reference)))
+          (format #f
+"
+class GeneratedStft
+{
+public:
+    GeneratedStft() = default;
+
+    static int parameterToFFTSize(float value) noexcept
+    {
+        switch (static_cast<int>(value))
+        {
+            case 0:  return 0;
+            case 1:  return 256;
+            case 2:  return 512;
+            case 3:  return 1024;
+            case 4:  return 2048;
+            case 5:  return 4096;
+            case 6:  return 8192;
+            default: return 0;
+        }
+    }
+
+    int getRequestedFFTSize(
+        const JX11AudioProcessor& processor) const noexcept
+    {
+        return parameterToFFTSize(
+            processor.value_~a);
+    }
+
+    void prepare(
+        int newFFTSize,
+        int numChannels,
+        int newMaximumBlockSize,
+        double newSampleRate)
+    {
+        jassert(juce::isPowerOfTwo(newFFTSize));
+        jassert(numChannels > 0);
+        jassert(newMaximumBlockSize > 0);
+
+        fftSize = newFFTSize;
+        hopSize = fftSize / 2;
+        maximumBlockSize = newMaximumBlockSize;
+        sampleRate = newSampleRate;
+
+        fft = std::make_unique<juce::dsp::FFT>(
+            static_cast<int>(
+                std::log2(
+                    static_cast<double>(fftSize))));
+
+        analysisWindow.resize(
+            static_cast<size_t>(fftSize));
+
+        synthesisWindow.resize(
+            static_cast<size_t>(fftSize));
+
+        for (int n = 0; n < fftSize; ++n)
+        {
+            const float hann =
+                0.5f
+                * (1.0f
+                   - std::cos(
+                       2.0f
+                       * juce::MathConstants<float>::pi
+                       * static_cast<float>(n)
+                       / static_cast<float>(fftSize - 1)));
+
+            const float w =
+                std::sqrt(
+                    juce::jmax(0.0f, hann));
+
+            analysisWindow[
+                static_cast<size_t>(n)] = w;
+
+            synthesisWindow[
+                static_cast<size_t>(n)] = w;
+        }
+
+        channels.clear();
+        channels.resize(
+            static_cast<size_t>(numChannels));
+
+        for (auto& channel : channels)
+        {
+            channel.fifo.assign(
+                static_cast<size_t>(fftSize),
+                0.0f);
+
+            channel.reim.assign(
+                static_cast<size_t>(2 * fftSize),
+                0.0f);
+
+            channel.ola.assign(
+                static_cast<size_t>(2 * fftSize),
+                0.0f);
+
+            channel.inputBlock.assign(
+                static_cast<size_t>(maximumBlockSize),
+                0.0f);
+
+            channel.analysis.assign(
+                static_cast<size_t>(fftSize),
+                0.0f);
+
+            channel.synthesis.assign(
+                static_cast<size_t>(fftSize),
+                0.0f);
+
+            channel.fifoFill = 0;
+            channel.olaAvailable = 0;
+            channel.olaWrite = 0;
+        }
+    }
+
+    void reset() noexcept
+    {
+        for (auto& channel : channels)
+        {
+            std::fill(
+                channel.fifo.begin(),
+                channel.fifo.end(),
+                0.0f);
+
+            std::fill(
+                channel.reim.begin(),
+                channel.reim.end(),
+                0.0f);
+
+            std::fill(
+                channel.ola.begin(),
+                channel.ola.end(),
+                0.0f);
+
+            std::fill(
+                channel.inputBlock.begin(),
+                channel.inputBlock.end(),
+                0.0f);
+
+            std::fill(
+                channel.analysis.begin(),
+                channel.analysis.end(),
+                0.0f);
+
+            std::fill(
+                channel.synthesis.begin(),
+                channel.synthesis.end(),
+                0.0f);
+
+            channel.fifoFill = 0;
+            channel.olaAvailable = 0;
+            channel.olaWrite = 0;
+        }
+    }
+
+    int getFFTSize() const noexcept
+    {
+        return fftSize;
+    }
+
+    int getHopSize() const noexcept
+    {
+        return hopSize;
+    }
+
+    double getSampleRate() const noexcept
+    {
+        return sampleRate;
+    }
+
+    void process(
+        juce::dsp::AudioBlock<float>& block,
+        JX11AudioProcessor* processor,
+        DoTheFFTJob& job)
+    {
+        jassert(fft != nullptr);
+
+        const auto numChannels =
+            static_cast<int>(
+                block.getNumChannels());
+
+        const auto numSamples =
+            static_cast<int>(
+                block.getNumSamples());
+
+        jassert(
+            numChannels
+            <= static_cast<int>(
+                channels.size()));
+
+        jassert(
+            numSamples
+            <= maximumBlockSize);
+
+        if (fft == nullptr
+            || numChannels
+               > static_cast<int>(channels.size())
+            || numSamples > maximumBlockSize)
+            return;
+
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            processChannel(
+                channels[
+                    static_cast<size_t>(ch)],
+                block.getChannelPointer(
+                    static_cast<size_t>(ch)),
+                numSamples,
+                processor,
+                job);
+        }
+    }
+
+private:
+    struct Channel
+    {
+        std::vector<float> fifo;
+        std::vector<float> reim;
+        std::vector<float> ola;
+
+        std::vector<float> inputBlock;
+        std::vector<float> analysis;
+        std::vector<float> synthesis;
+
+        int fifoFill = 0;
+        int olaAvailable = 0;
+        int olaWrite = 0;
+    };
+
+    void processFrame(
+        Channel& channel,
+        JX11AudioProcessor* processor,
+        DoTheFFTJob& job)
+    {
+        std::memcpy(
+            channel.analysis.data(),
+            channel.fifo.data(),
+            sizeof(float)
+                * static_cast<size_t>(fftSize));
+
+        for (int i = 0; i < fftSize; ++i)
+        {
+            channel.analysis[
+                static_cast<size_t>(i)]
+                *= analysisWindow[
+                    static_cast<size_t>(i)];
+        }
+
+        std::memcpy(
+            channel.reim.data(),
+            channel.analysis.data(),
+            sizeof(float)
+                * static_cast<size_t>(fftSize));
+
+        std::fill(
+            channel.reim.begin() + fftSize,
+            channel.reim.end(),
+            0.0f);
+
+        fft->performRealOnlyForwardTransform(
+            channel.reim.data());
+
+        // =====================================================
+        // DEVELOPER FFT CALLBACK
+        // =====================================================
+        job.doTheFFTJob(
+            processor,
+            fftSize,
+            channel.reim);
+
+        fft->performRealOnlyInverseTransform(
+            channel.reim.data());
+
+        std::memcpy(
+            channel.synthesis.data(),
+            channel.reim.data(),
+            sizeof(float)
+                * static_cast<size_t>(fftSize));
+
+        for (int i = 0; i < fftSize; ++i)
+        {
+            channel.synthesis[
+                static_cast<size_t>(i)]
+                *= synthesisWindow[
+                    static_cast<size_t>(i)];
+        }
+
+        jassert(
+            channel.olaWrite + fftSize
+            <= static_cast<int>(
+                channel.ola.size()));
+
+        for (int i = 0; i < fftSize; ++i)
+        {
+            channel.ola[
+                static_cast<size_t>(
+                    channel.olaWrite + i)]
+                += channel.synthesis[
+                    static_cast<size_t>(i)];
+        }
+
+        channel.olaAvailable += hopSize;
+        channel.olaWrite += hopSize;
+
+        std::memmove(
+            channel.fifo.data(),
+            channel.fifo.data() + hopSize,
+            sizeof(float)
+                * static_cast<size_t>(
+                    fftSize - hopSize));
+
+        channel.fifoFill -= hopSize;
+    }
+
+    void processChannel(
+        Channel& channel,
+        float* samples,
+        int numSamples,
+        JX11AudioProcessor* processor,
+        DoTheFFTJob& job)
+    {
+        std::memcpy(
+            channel.inputBlock.data(),
+            samples,
+            sizeof(float)
+                * static_cast<size_t>(numSamples));
+
+        int pos = 0;
+
+        while (pos < numSamples)
+        {
+            const int spaceInFifo =
+                fftSize - channel.fifoFill;
+
+            const int samplesRemaining =
+                numSamples - pos;
+
+            const int copyCount =
+                juce::jmin(
+                    spaceInFifo,
+                    samplesRemaining);
+
+            if (copyCount > 0)
+            {
+                std::memcpy(
+                    channel.fifo.data()
+                        + channel.fifoFill,
+                    channel.inputBlock.data()
+                        + pos,
+                    sizeof(float)
+                        * static_cast<size_t>(
+                            copyCount));
+
+                channel.fifoFill += copyCount;
+            }
+
+            while (channel.fifoFill >= fftSize)
+            {
+                processFrame(
+                    channel,
+                    processor,
+                    job);
+            }
+
+            const int emitCount =
+                juce::jmin(
+                    copyCount,
+                    channel.olaAvailable);
+
+            if (emitCount > 0)
+            {
+                std::memcpy(
+                    samples + pos,
+                    channel.ola.data(),
+                    sizeof(float)
+                        * static_cast<size_t>(
+                            emitCount));
+
+                const int validLength =
+                    juce::jmin(
+                        static_cast<int>(
+                            channel.ola.size()),
+                        channel.olaWrite
+                            + fftSize);
+
+                const int remaining =
+                    juce::jmax(
+                        0,
+                        validLength
+                            - emitCount);
+
+                if (remaining > 0)
+                {
+                    std::memmove(
+                        channel.ola.data(),
+                        channel.ola.data()
+                            + emitCount,
+                        sizeof(float)
+                            * static_cast<size_t>(
+                                remaining));
+                }
+
+                std::fill(
+                    channel.ola.begin()
+                        + remaining,
+                    channel.ola.end(),
+                    0.0f);
+
+                channel.olaWrite =
+                    juce::jmax(
+                        0,
+                        channel.olaWrite
+                            - emitCount);
+
+                channel.olaAvailable -=
+                    emitCount;
+            }
+            else
+            {
+                // Finché la STFT non dispone ancora
+                // di un frame sintetizzato, passa
+                // temporaneamente il segnale originale.
+                std::memcpy(
+                    samples + pos,
+                    channel.inputBlock.data()
+                        + pos,
+                    sizeof(float)
+                        * static_cast<size_t>(
+                            copyCount));
+            }
+
+            pos += copyCount;
+
+            // Protezione contro loop impossibili.
+            jassert(copyCount > 0);
+
+            if (copyCount <= 0)
+                break;
+        }
+    }
+
+    std::vector<Channel> channels;
+
+    std::unique_ptr<juce::dsp::FFT> fft;
+
+    std::vector<float> analysisWindow;
+    std::vector<float> synthesisWindow;
+
+    int fftSize = 1024;
+    int hopSize = 512;
+    int maximumBlockSize = 0;
+
+    double sampleRate = 44100.0;
+};
+"
+                  ref))
+        "")))
+
+(define-public (generate-myplugin-fft-members-code)
+  (let ((model (fft-model)))
+    (if model
+        (let ((ref
+               (assoc-ref model
+                          'processor-reference)))
+          (format #f
+"
+    GeneratedStft stft256;
+    GeneratedStft stft512;
+    GeneratedStft stft1024;
+    GeneratedStft stft2048;
+    GeneratedStft stft4096;
+    GeneratedStft stft8192;
+
+    DoTheFFTJob generatedFftJob;
+
+    void processFFT(
+        juce::AudioBuffer<float>& buffer)
+    {
+        juce::dsp::AudioBlock<float> block(buffer);
+
+        switch (
+            static_cast<int>(
+                processor->value_~a))
+        {
+            case 0:
+                // FFT OFF
+                return;
+
+            case 1:
+                stft256.process(
+                    block,
+                    processor,
+                    generatedFftJob);
+                break;
+
+            case 2:
+                stft512.process(
+                    block,
+                    processor,
+                    generatedFftJob);
+                break;
+
+            case 3:
+                stft1024.process(
+                    block,
+                    processor,
+                    generatedFftJob);
+                break;
+
+            case 4:
+                stft2048.process(
+                    block,
+                    processor,
+                    generatedFftJob);
+                break;
+
+            case 5:
+                stft4096.process(
+                    block,
+                    processor,
+                    generatedFftJob);
+                break;
+
+            case 6:
+                stft8192.process(
+                    block,
+                    processor,
+                    generatedFftJob);
+                break;
+
+            default:
+                return;
+        }
+    }
+"
+                  ref))
+        "")))
+
+
+(define-public (generate-myplugin-fft-init-code)
+  (if (fft-model)
+      "
+    {
+        const int fftChannels =
+            juce::jmax(
+                1,
+                juce::jmax(
+                    processor->getTotalNumInputChannels(),
+                    processor->getTotalNumOutputChannels()));
+
+        const int fftMaximumBlockSize =
+            juce::jmax(
+                1,
+                processor->value_info_max_samplesPerBlock);
+
+        const double fftSampleRate =
+            processor->value_info_sampleRate;
+
+        stft256.prepare(
+            256,
+            fftChannels,
+            fftMaximumBlockSize,
+            fftSampleRate);
+
+        stft512.prepare(
+            512,
+            fftChannels,
+            fftMaximumBlockSize,
+            fftSampleRate);
+
+        stft1024.prepare(
+            1024,
+            fftChannels,
+            fftMaximumBlockSize,
+            fftSampleRate);
+
+        stft2048.prepare(
+            2048,
+            fftChannels,
+            fftMaximumBlockSize,
+            fftSampleRate);
+
+        stft4096.prepare(
+            4096,
+            fftChannels,
+            fftMaximumBlockSize,
+            fftSampleRate);
+
+        stft8192.prepare(
+            8192,
+            fftChannels,
+            fftMaximumBlockSize,
+            fftSampleRate);
+
+        stft256.reset();
+        stft512.reset();
+        stft1024.reset();
+        stft2048.reset();
+        stft4096.reset();
+        stft8192.reset();
+    }
+"
+      ""))
+
+
+(define-public (generate-myplugin-render-buffer-code)
+  "
+    realPlugin->render(buffer);
+")
+
+(define-public (generate-myplugin-render-block-code)
+  "
+    realPlugin->render(buffer);
+")

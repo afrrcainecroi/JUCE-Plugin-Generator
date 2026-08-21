@@ -167,12 +167,13 @@
 		   "\n"
 		   (generate-dsp-runtime-members-code))
   
-  (AppendStringTo *OVERSAMPLING_PPC*
-                  (generate-oversampling-prepare-code))
-
-  (AppendStringTo *OVERSAMPLING_PPCRR*
-                  (generate-oversampling-release-code))
-  
+  (AppendStringTo *OVERSAMPLING_PPC* (generate-oversampling-prepare-code))
+  (AppendStringTo *OVERSAMPLING_PPCRR* (generate-oversampling-release-code))
+  (AppendStringTo *FFT_INFRASTRUCTURE* "\n" (generate-fft-infrastructure-code))
+  (AppendStringTo *FFT_MYPLUGIN_MEMBERS* "\n" (generate-myplugin-fft-members-code))
+  (AppendStringTo *MYPLUGIN_FFT_INIT* "\n" (generate-myplugin-fft-init-code))
+  (AppendStringTo *MYPLUGIN_RENDER_BUFFER* "\n" (generate-myplugin-render-buffer-code))
+  (AppendStringTo *MYPLUGIN_RENDER_BLOCK* "\n" (generate-myplugin-render-block-code))
 
   ;;
   ;;Genera i codici c++ per PluginEditor.cpp
@@ -183,6 +184,8 @@
 	(Utils.cpp (string-append dst-folder "/Source/" "Utils.cpp"))
 	(Utils.h (string-append dst-folder "/Source/" "Utils.h"))
 	(Synth.h (string-append dst-folder "/Source/" "Synth.h"))
+	(MyPlugin.h (string-append dst-folder "/Source/" "MyPlugin.h"))
+	(MyPlugin.cpp (string-append dst-folder "/Source/" "MyPlugin.cpp"))
 	)
     ;;
     ;; (set! *OVERSAMPLING_PPC* (if *OVERSAMPLING-ENABLED*
@@ -231,7 +234,7 @@
     ;;
     ;;Il codice per la FFT o per NON FFT, ma solo se sto generando la prima volta. Se
     ;;già esiste, non fare nulla!
-    (if generate-fft-code
+    (if generate-fft-code ;;Lo posso lasciare com'è poiché #f
 	(set! *SYNTH_H_RP* CODICE-PER-FFT)
 	(set! *SYNTH_H_RP* CODICE-NON-PER-FFT))
     ;;
@@ -276,6 +279,14 @@
     ;;La gestione del WET/DRY effettuata in automatico se uno slider è settato wet/DRY!
     (replace-between-flags PluginProcessor.cpp *WETDRY_PPC_PREFIX::START* *WETDRY_PPC_PREFIX::END* *WETDRY_PPC_PREFIX*)
     (replace-between-flags PluginProcessor.cpp *WETDRY_PPC_POSTFIX::START* *WETDRY_PPC_POSTFIX::END* *WETDRY_PPC_POSTFIX*)
+    (replace-between-flags MyPlugin.cpp *MYPLUGIN_FFT_INIT::START* *MYPLUGIN_FFT_INIT::END* *MYPLUGIN_FFT_INIT*)
+    (replace-between-flags MyPlugin.cpp *MYPLUGIN_RENDER_BUFFER::START* *MYPLUGIN_RENDER_BUFFER::END* *MYPLUGIN_RENDER_BUFFER*)
+    (replace-between-flags MyPlugin.cpp *MYPLUGIN_RENDER_BLOCK::START* *MYPLUGIN_RENDER_BLOCK::END* *MYPLUGIN_RENDER_BLOCK*)
+    ;;
+    ;;FFT
+    (replace-between-flags Synth.h *FFT_INFRASTRUCTURE::START* *FFT_INFRASTRUCTURE::END* *FFT_INFRASTRUCTURE*)
+    (replace-between-flags MyPlugin.h *FFT_MYPLUGIN_MEMBERS::START* *FFT_MYPLUGIN_MEMBERS::END* *FFT_MYPLUGIN_MEMBERS*)
+    
     ;;
     (when (not (generation-grid))
       (Show! "<grid> has to be defined!!")
@@ -1545,219 +1556,35 @@ var id var))
 
 (define (NewGeneric-interface dst-folder new-name)
 
-(make <screen>
-      #:ratio (/ (+ 1.0 (sqrt 5.0)) 2.0)
-      #:width 800)
+  ;; ============================================================
+  ;; SCREEN / GRID
+  ;; ============================================================
 
-(make <grid>
-      #:rows 24
-      #:cols 24
-      #:show-grid #t)
+  (make <screen>
+        #:ratio (/ (+ 1.0 (sqrt 5.0)) 2.0)
+        #:width 800)
 
+  (make <grid>
+        #:rows 24
+        #:cols 24
+        #:show-grid #t)
 
-;; ============================================================
-;; UI PROPERTY TEST — BUTTON / TOGGLE / SWITCH / SELECTOR
-;; ============================================================
+  (make <rotary-slider>
+  #:id "Input Gain"
+  #:role 'input-gain
 
-(make <text-button>
-  #:id "TEST Text Button"
-  #:text "TEXT BUTTON"
-  #:tooltip "Tooltip del TextButton"
-  #:enabled #t
-  #:row 4
-  #:col 17
-  #:row-span 1
-  #:col-span 3)
-
-(make <text-button>
-  #:id "TEST Disabled Button"
-  #:text "DISABLED"
-  #:tooltip "Questo bottone deve essere disabilitato"
-  #:enabled #f
-  #:row 5
-  #:col 17
-  #:row-span 1
-  #:col-span 3)
-
-
-(make <normal-toggle-button>
-  #:id "TEST Toggle"
-  #:text "NORMAL TOGGLE"
-  #:default-state #t
-  #:tooltip "Toggle normale, inizialmente ON"
-  #:enabled #t
-
-  #:parameter-id "testToggle"
-  #:parameter-name "Test Toggle"
-  #:processor-reference "testToggle"
-
-  #:row 6
-  #:col 17
-  #:row-span 1
-  #:col-span 3)
-
-
-(make <switch>
-  #:id "TEST Switch"
-  #:text "SWITCH"
-  #:default-state #f
-  #:tooltip "Switch style, inizialmente OFF"
-  #:enabled #t
-
-  #:parameter-id "testSwitch"
-  #:parameter-name "Test Switch"
-  #:processor-reference "testSwitch"
-
-  #:row 7
-  #:col 17
-  #:row-span 1
-  #:col-span 3)
-
-
-(make <selector>
-  #:id "TEST Selector"
-  #:items '("ALPHA" "BETA" "GAMMA" "DELTA")
-  #:default-index 2
-  #:justification 'centred
-  #:tooltip "Selector centrato, default GAMMA"
-  #:enabled #t
-  #:text-when-nothing-selected "CHOOSE..."
-  #:text-when-no-choices "EMPTY!"
-
-  #:row 8
-  #:col 17
-  #:row-span 1
-  #:col-span 4)
-
-
-(make <meter>
-  #:id "Test Input Level"
-  #:role 'input-meter
-
-  #:style 'segmented
-  #:scale-type 'db
-  #:is-sharp #f
-  #:glow-multiplier 0.6
-  #:range-min -60.0
-  #:range-max 6.0
-  #:num-segments 30
-  #:tick-mode 'all
-
-  #:row 2
-  #:col 2
-  #:row-span 11
-  #:col-span 2
-  #:margin-tb 4
-  #:margin-lr 4)
-
-
-(make <meter>
-  #:id "Test Output Level"
-  #:role 'output-meter
-
-  #:style 'analog
-  #:scale-type 'db
-  #:is-sharp #t
-  #:glow-multiplier 1.4
-  #:range-min -48.0
-  #:range-max 3.0
-  #:num-segments 16
-  #:tick-mode 'all
-
-  #:row 2
-  #:col 21
-  #:row-span 11
-  #:col-span 2
-  #:margin-tb 4
-  #:margin-lr 4)
-
-
-(make <scope>
-  #:id "Test Wave Monitor"
-  #:role 'scope
-
-  #:grid-style 'radar
-  #:is-sharp #f
-  #:glow-multiplier 1.6
-
-  #:row 5
-  #:col 6
-  #:row-span 6
-  #:col-span 13
-  #:margin-tb 4
-  #:margin-lr 4)
-
-(make <rotary-slider>
-  #:id "Test Log Rotary"
-  #:parameter-id "testLogRotary"
-  #:parameter-name "Test Log Rotary"
-  #:processor-reference "testLogRotary"
+  #:parameter-id "inputGain"
+  #:parameter-name "Input Gain"
+  #:processor-reference "inputGain"
   #:version-hint 1
 
-  #:title "FREQUENCY"
-  #:min 20.0
-  #:max 20000.0
-  #:default 1000.0
-  #:interval 0.0
-  #:scale 'logarithmic
-  #:value-type 'default
-  #:suffix " Hz"
+  #:title "INPUT GAIN"
 
-  #:show-value #t
-  #:show-ticks #t
-  #:show-labels #t
-  #:tick-count 7
-  #:tick-mode 'all
-
-  #:row 3
-  #:col 3
-  #:row-span 5
-  #:col-span 5)
-
-
-(make <linear-slider>
-  #:id "Test Horizontal Slider"
-  #:parameter-id "testHorizontal"
-  #:parameter-name "Test Horizontal"
-  #:processor-reference "testHorizontal"
-  #:version-hint 1
-
-  #:orientation 'horizontal
-  #:title "MIX"
-  #:min 0.0
-  #:max 100.0
-  #:default 50.0
-  #:interval 1.0
-  #:scale 'linear
-  #:value-type 'default
-  #:suffix " %"
-
-  #:show-value #t
-  #:show-ticks #t
-  #:show-labels #t
-  #:tick-count 5
-  #:tick-mode 'all
-  #:tick-labels '("DRY" "25" "50" "75" "WET")
-
-  #:row 9
-  #:col 5
-  #:row-span 3
-  #:col-span 14)
-
-
-(make <linear-slider>
-  #:id "Test Vertical Slider"
-  #:parameter-id "testVertical"
-  #:parameter-name "Test Vertical"
-  #:processor-reference "testVertical"
-  #:version-hint 1
-
-  #:orientation 'vertical
-  #:title "LEVEL"
-  #:min -60.0
-  #:max 6.0
+  #:min -24.0
+  #:max 24.0
   #:default 0.0
-  #:interval 1.0
+  #:interval 0.1
+
   #:scale 'linear
   #:value-type 'default
   #:suffix " dB"
@@ -1765,15 +1592,163 @@ var id var))
   #:show-value #t
   #:show-ticks #t
   #:show-labels #t
-  #:tick-count 7
-  #:tick-mode 'endpoints
+  #:tick-count 5
+  #:tick-mode 'all
+  #:tick-labels '("-24" "-12" "0" "+12" "+24")
 
-  #:row 3
-  #:col 20
-  #:row-span 9
-  #:col-span 3)
+  #:row 16
+  #:col 1
+  #:row-span 7
+  #:col-span 6)
 
-(make <selector>
+  (make <rotary-slider>
+  #:id "Output Gain"
+  #:role 'output-gain
+
+  #:parameter-id "outputGain"
+  #:parameter-name "Output Gain"
+  #:processor-reference "outputGain"
+  #:version-hint 1
+
+  #:title "OUTPUT GAIN"
+
+  #:min -24.0
+  #:max 24.0
+  #:default 0.0
+  #:interval 0.1
+
+  #:scale 'linear
+  #:value-type 'default
+  #:suffix " dB"
+
+  #:show-value #t
+  #:show-ticks #t
+  #:show-labels #t
+  #:tick-count 5
+  #:tick-mode 'all
+  #:tick-labels '("-24" "-12" "0" "+12" "+24")
+
+  #:row 16
+  #:col 21
+  #:row-span 7
+  #:col-span 6)
+  
+
+  ;; ============================================================
+  ;; INPUT METER
+  ;; ============================================================
+
+  (make <meter>
+    #:id "Input Level"
+    #:role 'input-meter
+
+    #:style 'segmented
+    #:scale-type 'db
+    #:is-sharp #f
+    #:glow-multiplier 0.6
+    #:range-min -60.0
+    #:range-max 6.0
+    #:num-segments 30
+    #:tick-mode 'all
+
+    #:row 3
+    #:col 1
+    #:row-span 14
+    #:col-span 2
+    #:margin-tb 4
+    #:margin-lr 4)
+
+
+  ;; ============================================================
+  ;; OUTPUT METER
+  ;; ============================================================
+
+  (make <meter>
+    #:id "Output Level"
+    #:role 'output-meter
+
+    #:style 'segmented
+    #:scale-type 'db
+    #:is-sharp #f
+    #:glow-multiplier 0.6
+    #:range-min -60.0
+    #:range-max 6.0
+    #:num-segments 30
+    #:tick-mode 'all
+
+    #:row 3
+    #:col 21
+    #:row-span 14
+    #:col-span 2
+    #:margin-tb 4
+    #:margin-lr 4)
+
+  
+
+  ;; ============================================================
+  ;; SCOPE
+  ;; ============================================================
+
+  (make <scope>
+    #:id "Wave Monitor"
+    #:role 'scope
+
+    #:grid-style 'radar
+    #:is-sharp #f
+    #:glow-multiplier 1.2
+
+    #:row 3
+    #:col 4
+    #:row-span 9
+    #:col-span 16
+    #:margin-tb 4
+    #:margin-lr 4)
+
+
+  ;; ============================================================
+  ;; WET / DRY
+  ;; ============================================================
+
+  (make <linear-slider>
+    #:id "Wet Dry"
+    #:role 'wet-dry
+
+    #:parameter-id "wetdry"
+    #:parameter-name "Wet Dry"
+    #:processor-reference "wetdry"
+    #:version-hint 1
+
+    #:orientation 'horizontal
+    #:title "WET / DRY"
+
+    #:min 0.0
+    #:max 100.0
+    #:default 100.0
+    #:interval 1.0
+
+    #:scale 'linear
+    #:value-type 'default
+    #:suffix " %"
+
+    #:show-value #t
+    #:show-ticks #t
+    #:show-labels #t
+    #:tick-count 5
+    #:tick-mode 'all
+
+    #:tick-labels
+    '("DRY" "25" "50" "75" "WET")
+
+    #:row 13
+    #:col 5
+    #:row-span 3
+    #:col-span 14)
+
+
+  ;; ============================================================
+  ;; OVERSAMPLING
+  ;; ============================================================
+(make <rotary-slider>
   #:id "Oversampling"
   #:role 'oversampling
 
@@ -1782,15 +1757,38 @@ var id var))
   #:processor-reference "oversampling"
   #:version-hint 1
 
-  #:items '("Off" "2x" "4x" "8x")
-  #:default-index 1
+  #:title "OVERSAMPLING"
 
-  #:row 12
-  #:col 8
-  #:row-span 1
-  #:col-span 4)
+  #:min 0.0
+  #:max 3.0
+  #:default 0.0
+  #:interval 1.0
 
-(make <selector>
+  #:scale 'linear
+  #:value-type 'default
+  #:suffix ""
+
+  #:show-value #t
+  #:show-ticks #t
+  #:show-labels #t
+  #:tick-count 4
+  #:tick-mode 'all
+
+  #:tick-labels
+  '("OFF" "2x" "4x" "8x")
+
+  #:row 16
+  #:col 4
+  #:row-span 7
+  #:col-span 7)
+  
+
+
+  ;; ============================================================
+  ;; FFT SIZE
+  ;; ============================================================
+
+ (make <rotary-slider>
   #:id "FFT Size"
   #:role 'fft-size
 
@@ -1799,13 +1797,36 @@ var id var))
   #:processor-reference "fftSize"
   #:version-hint 1
 
-  #:items '("256" "512" "1024" "2048" "4096" "8192")
-  #:default-index 3
+  #:title "FFT SIZE"
 
-  #:row 10
-  #:col 18
-  #:row-span 1
-  #:col-span 4)
+  #:min 0.0
+  #:max 6.0
+  #:default 0.0
+  #:interval 1.0
+
+  #:scale 'linear
+  #:value-type 'default
+  #:suffix ""
+
+  #:show-value #t
+  #:show-ticks #t
+  #:show-labels #t
+  #:tick-count 7
+  #:tick-mode 'all
+
+  #:tick-labels
+  '("OFF"
+    "256"
+    "512"
+    "1024"
+    "2048"
+    "4096"
+    "8192")
+
+  #:row 16
+  #:col 13
+  #:row-span 7
+  #:col-span 8) 
 
   )
 

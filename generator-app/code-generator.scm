@@ -203,7 +203,12 @@
 	       generate-dsp-runtime-members-code
 	       generate-oversampling-prepare-code
 	       generate-oversampling-release-code
-	       ;;generate-process-oversampling-compensation
+	       generate-fft-infrastructure-code
+	       generate-fft-runtime-members-code
+	       generate-myplugin-fft-members-code
+	       generate-myplugin-fft-init-code
+	       generate-myplugin-render-buffer-code
+	       generate-myplugin-render-block-code
 	       )
   )
 
