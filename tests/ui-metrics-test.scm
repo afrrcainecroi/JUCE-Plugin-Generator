@@ -79,4 +79,67 @@
   (check 'unknown-profile
          (not (ui-profile 'rotary-slider 'unknown-profile))))
 
+(let* ((metrics (ui-metrics 'linear-slider))
+       (technical-min (field metrics 'technical-min))
+       (variants (field metrics 'variants))
+       (horizontal (field variants 'horizontal))
+       (vertical (field variants 'vertical)))
+  (check 'linear-metrics-present metrics)
+  (check 'linear-technical-min-not-normative
+         (and (not (field technical-min 'normative?))
+              (eq? (field technical-min 'status) 'to-be-derived)
+              (not (field technical-min 'width))
+              (not (field technical-min 'height))))
+
+  (check 'horizontal-base-profiles
+         (and (eq? (field horizontal 'visual-min-profile) 'compact)
+              (eq? (field horizontal 'preferred-profile) 'standard)
+              (eq? (field horizontal 'useful-max-profile) 'extended)))
+  (check 'vertical-base-profiles
+         (and (eq? (field vertical 'visual-min-profile) 'compact)
+              (eq? (field vertical 'preferred-profile) 'standard)
+              (eq? (field vertical 'useful-max-profile) 'extended)))
+
+  (check 'horizontal-profiles
+         (and (equal? (ui-profile 'linear-slider 'horizontal 'compact)
+                      '((width . 10) (height . 3)))
+              (equal? (ui-profile 'linear-slider 'horizontal 'standard)
+                      '((width . 14) (height . 4)))
+              (equal? (ui-profile 'linear-slider 'horizontal 'extended)
+                      '((width . 18) (height . 5)))))
+  (check 'vertical-profiles
+         (and (equal? (ui-profile 'linear-slider 'vertical 'compact)
+                      '((width . 3) (height . 10)))
+              (equal? (ui-profile 'linear-slider 'vertical 'standard)
+                      '((width . 4) (height . 14)))
+              (equal? (ui-profile 'linear-slider 'vertical 'extended)
+                      '((width . 5) (height . 18)))))
+
+  (check 'vertical-tick-labels-minimum
+         (eq? (ui-capability-profile
+               'linear-slider 'vertical '(tick-labels)
+               'minimum-visual-profile)
+              'standard))
+  (check 'horizontal-full-preferred
+         (eq? (ui-capability-profile
+               'linear-slider 'horizontal
+               '(title value ticks tick-labels)
+               'preferred-profile '((space . abundant)))
+              'extended))
+  (check 'vertical-full-preferred
+         (eq? (ui-capability-profile
+               'linear-slider 'vertical
+               '(title value ticks tick-labels)
+               'preferred-profile '((space . abundant)))
+              'extended))
+  (check 'discrete-value-does-not-change-minimum
+         (not (ui-capability-profile
+               'linear-slider 'vertical '(discrete-text-value)
+               'minimum-visual-profile)))
+
+  ;; Existing rotary API remains unchanged.
+  (check 'rotary-profile-backward-compatibility
+         (equal? (ui-profile 'rotary-slider 'compact)
+                 '((width . 5) (height . 5)))))
+
 (display "ui-metrics-test: PASS\n")

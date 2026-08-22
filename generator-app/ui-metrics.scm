@@ -2,7 +2,8 @@
   #:use-module (srfi srfi-1)
   #:export (register-ui-metrics!
             ui-metrics
-            ui-profile))
+            ui-profile
+            ui-capability-profile))
 
 ;; Intrinsic UI metrics are registered by TYPE. They do not encode ROLE,
 ;; instance PROPERTY values, RESOURCE identities, or layout decisions.
@@ -27,11 +28,62 @@
   (let ((entry (assoc type *ui-metrics-registry*)))
     (and entry (cdr entry))))
 
-(define (ui-profile type profile)
+(define (ui-profile type selector . selectors)
+  (let ((metrics (ui-metrics type)))
+    (cond
+     ;; Backward-compatible, non-variant query.
+     ((null? selectors)
+      (let* ((profiles (and metrics (metric-ref metrics 'profiles)))
+             (entry (and profiles (assoc selector profiles))))
+        (and entry (cdr entry))))
+     ;; Variant-aware query.
+     ((null? (cdr selectors))
+      (let* ((variants (and metrics (metric-ref metrics 'variants)))
+             (variant-entry (and variants (assoc selector variants)))
+             (variant (and variant-entry (cdr variant-entry)))
+             (profiles (and variant (metric-ref variant 'profiles)))
+             (entry (and profiles (assoc (car selectors) profiles))))
+        (and entry (cdr entry))))
+     (else
+      (error "ui-profile expects TYPE PROFILE or TYPE VARIANT PROFILE"
+             type selector selectors)))))
+
+(define (condition-matches? condition variant capabilities context)
+  (every
+   (lambda (entry)
+     (let ((key (car entry))
+           (expected (cdr entry)))
+       (case key
+         ((variant) (eq? variant expected))
+         ((capabilities-all)
+          (every (lambda (capability)
+                   (memq capability capabilities))
+                 expected))
+         (else
+          (equal? (metric-ref context key) expected)))))
+   condition))
+
+;; Returns an advisory profile selected by the first matching capability rule.
+;; It does not alter the base contract and is not connected to layout.
+(define* (ui-capability-profile type variant capabilities effect
+                                #:optional (context '()))
   (let* ((metrics (ui-metrics type))
-         (profiles (and metrics (metric-ref metrics 'profiles)))
-         (entry (and profiles (assoc profile profiles))))
-    (and entry (cdr entry))))
+         (rules (or (and metrics
+                         (or (metric-ref metrics 'capability-rules)
+                             (metric-ref metrics
+                                         'capability-size-preferences)))
+                    '())))
+    (let loop ((remaining rules))
+      (if (null? remaining)
+          #f
+          (let* ((rule (car remaining))
+                 (condition (metric-ref rule 'when))
+                 (result (assoc effect rule)))
+            (if (and result
+                     (condition-matches? condition variant
+                                         capabilities context))
+                (cdr result)
+                (loop (cdr remaining))))))))
 
 (register-ui-metrics!
  'rotary-slider
@@ -99,5 +151,63 @@
        ((when
          . ((capabilities-all . (morph-icon))
             (configuration . morph/full)
+            (space . abundant)))
+        (preferred-profile . extended))))))
+
+(register-ui-metrics!
+ 'linear-slider
+ '((technical-min
+    . ((normative? . #f)
+       (status . to-be-derived)
+       (width . #f)
+       (height . #f)))
+
+   (variants
+    . ((horizontal
+        . ((visual-min
+            . ((width . 10) (height . 3)))
+           (preferred
+            . ((width . 14) (height . 4)))
+           (useful-max
+            . ((width . 18) (height . 5)))
+           (visual-min-profile . compact)
+           (preferred-profile . standard)
+           (useful-max-profile . extended)
+           (profiles
+            . ((compact . ((width . 10) (height . 3)))
+               (standard . ((width . 14) (height . 4)))
+               (extended . ((width . 18) (height . 5)))))))
+       (vertical
+        . ((visual-min
+            . ((width . 3) (height . 10)))
+           (preferred
+            . ((width . 4) (height . 14)))
+           (useful-max
+            . ((width . 5) (height . 18)))
+           (visual-min-profile . compact)
+           (preferred-profile . standard)
+           (useful-max-profile . extended)
+           (profiles
+            . ((compact . ((width . 3) (height . 10)))
+               (standard . ((width . 4) (height . 14)))
+               (extended . ((width . 5) (height . 18)))))))))
+
+   (capabilities
+    . (title value ticks tick-labels discrete-text-value))
+
+   ;; Rules are advisory metadata and are not consumed by layout.
+   (capability-rules
+    . (((when
+         . ((variant . vertical)
+            (capabilities-all . (tick-labels))))
+        (minimum-visual-profile . standard))
+       ((when
+         . ((variant . horizontal)
+            (capabilities-all . (ticks tick-labels title value))
+            (space . abundant)))
+        (preferred-profile . extended))
+       ((when
+         . ((variant . vertical)
+            (capabilities-all . (ticks tick-labels title value))
             (space . abundant)))
         (preferred-profile . extended))))))
