@@ -506,3 +506,89 @@
          . ((capabilities-all . (text))
             (text-length-class . long)))
         (preferred-profile . extended))))))
+
+(register-ui-metrics!
+ 'selector
+ '((technical-min
+    . ((normative? . #f)
+       (status . to-be-derived)
+       (width . #f)
+       (height . #f)))
+   (visual-min . ((width . 8) (height . 2)))
+   (preferred . ((width . 12) (height . 2)))
+   (useful-max . ((width . 16) (height . 2)))
+   (visual-min-profile . compact)
+   (preferred-profile . standard)
+   (useful-max-profile . extended)
+   (profiles
+    . ((compact . ((width . 8) (height . 2)))
+       (standard . ((width . 12) (height . 2)))
+       (extended . ((width . 16) (height . 2)))))
+   (natural-geometry
+    . ((form . horizontal-combo-box)
+       (lines . single)))
+   (capabilities
+    . (items default-index justification enabled parameter-binding
+             arrow-region popup-menu))
+   (content-dependent
+    . ((items/text-length
+        . ((effect . preferred-profile)
+           (classification . descriptive-advisory)))
+       (justification
+        . ((footprint-effect . none)
+           (minimum-footprint-effect . none)))
+       (enabled . ((footprint-effect . none)))
+       (parameter-binding . ((footprint-effect . none)))
+       (default-index . ((footprint-effect . none)))
+       (arrow-region . ((classification . renderer-configured)))
+       ;; The popup has its own geometry and does not affect the footprint of
+       ;; the closed control.
+       (popup-menu . ((footprint-effect . none)))))
+   (capability-rules
+    . (((when
+         . ((capabilities-all . (items))
+            (text-length-class . long)))
+        (preferred-profile . extended))))))
+
+(register-ui-metrics!
+ 'palette-selector
+ '((technical-min
+    . ((normative? . #f)
+       (status . to-be-derived)
+       (width . #f)
+       (height . #f)))
+   (visual-min . ((width . 8) (height . 2)))
+   (preferred . ((width . 12) (height . 2)))
+   (useful-max . ((width . 16) (height . 2)))
+   (visual-min-profile . compact)
+   (preferred-profile . standard)
+   (useful-max-profile . extended)
+   (profiles
+    . ((compact . ((width . 8) (height . 2)))
+       (standard . ((width . 12) (height . 2)))
+       (extended . ((width . 16) (height . 2)))))
+   (natural-geometry
+    . ((form . horizontal-combo-box)
+       (lines . single)))
+   (capabilities
+    . (items default-index justification enabled parameter-binding
+             arrow-region popup-menu predefined-palette-set palette-callback))
+   (content-dependent
+    . ((items/text-length
+        . ((effect . preferred-profile)
+           (classification . descriptive-advisory)))
+       (justification
+        . ((footprint-effect . none)
+           (minimum-footprint-effect . none)))
+       (enabled . ((footprint-effect . none)))
+       (parameter-binding . ((footprint-effect . none)))
+       (default-index . ((footprint-effect . none)))
+       (arrow-region . ((classification . renderer-configured)))
+       (popup-menu . ((footprint-effect . none)))
+       (predefined-palette-set . ((footprint-effect . none)))
+       (palette-callback . ((footprint-effect . none)))))
+   (capability-rules
+    . (((when
+         . ((capabilities-all . (items))
+            (text-length-class . long)))
+        (preferred-profile . extended))))))

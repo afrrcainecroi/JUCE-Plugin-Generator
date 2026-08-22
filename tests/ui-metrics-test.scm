@@ -432,6 +432,103 @@
                'link #f '(font-size) 'preferred-profile
                '((font-size-class . large))))))
 
+(define (check-selector-contract type expected-capabilities)
+  (let* ((metrics (ui-metrics type))
+         (technical-min (field metrics 'technical-min))
+         (natural-geometry (field metrics 'natural-geometry))
+         (content-dependent (field metrics 'content-dependent)))
+    (check (list type 'present) metrics)
+    (check (list type 'technical-min)
+           (and (not (field technical-min 'normative?))
+                (eq? (field technical-min 'status) 'to-be-derived)
+                (not (field technical-min 'width))
+                (not (field technical-min 'height))))
+    (check (list type 'profiles)
+           (and (equal? (ui-profile type 'compact)
+                        '((width . 8) (height . 2)))
+                (equal? (ui-profile type 'standard)
+                        '((width . 12) (height . 2)))
+                (equal? (ui-profile type 'extended)
+                        '((width . 16) (height . 2)))))
+    (check (list type 'base-contract)
+           (and (equal? (field metrics 'visual-min)
+                        '((width . 8) (height . 2)))
+                (equal? (field metrics 'preferred)
+                        '((width . 12) (height . 2)))
+                (equal? (field metrics 'useful-max)
+                        '((width . 16) (height . 2)))
+                (eq? (field metrics 'visual-min-profile) 'compact)
+                (eq? (field metrics 'preferred-profile) 'standard)
+                (eq? (field metrics 'useful-max-profile) 'extended)))
+    (check (list type 'natural-geometry)
+           (equal? natural-geometry
+                   '((form . horizontal-combo-box) (lines . single))))
+    (check (list type 'capabilities)
+           (equal? (field metrics 'capabilities) expected-capabilities))
+    (check (list type 'content-metadata)
+           (and (equal? (field content-dependent 'items/text-length)
+                        '((effect . preferred-profile)
+                          (classification . descriptive-advisory)))
+                (equal? (field content-dependent 'justification)
+                        '((footprint-effect . none)
+                          (minimum-footprint-effect . none)))
+                (eq? (field (field content-dependent 'enabled)
+                            'footprint-effect)
+                     'none)
+                (eq? (field (field content-dependent 'parameter-binding)
+                            'footprint-effect)
+                     'none)
+                (eq? (field (field content-dependent 'default-index)
+                            'footprint-effect)
+                     'none)
+                (eq? (field (field content-dependent 'arrow-region)
+                            'classification)
+                     'renderer-configured)
+                (eq? (field (field content-dependent 'popup-menu)
+                            'footprint-effect)
+                     'none)))
+    (check (list type 'long-text)
+           (eq? (ui-capability-profile
+                 type #f '(items) 'preferred-profile
+                 '((text-length-class . long)))
+                'extended))
+    (check (list type 'non-geometric-capabilities)
+           (and (not (ui-capability-profile
+                      type #f '(enabled) 'preferred-profile
+                      '((enabled . #f))))
+                (not (ui-capability-profile
+                      type #f '(parameter-binding) 'preferred-profile))
+                (not (ui-capability-profile
+                      type #f '(default-index) 'preferred-profile))
+                (not (ui-capability-profile
+                      type #f '(justification) 'minimum-visual-profile
+                      '((justification . right))))))))
+
+(check-selector-contract
+ 'selector
+ '(items default-index justification enabled parameter-binding
+         arrow-region popup-menu))
+(check-selector-contract
+ 'palette-selector
+ '(items default-index justification enabled parameter-binding
+         arrow-region popup-menu predefined-palette-set palette-callback))
+
+(let ((content-dependent
+       (field (ui-metrics 'palette-selector) 'content-dependent)))
+  (check 'palette-selector-specific-capabilities-do-not-change-footprint
+         (and (eq? (field (field content-dependent 'predefined-palette-set)
+                          'footprint-effect)
+                   'none)
+              (eq? (field (field content-dependent 'palette-callback)
+                          'footprint-effect)
+                   'none)
+              (not (ui-capability-profile
+                    'palette-selector #f '(predefined-palette-set)
+                    'preferred-profile))
+              (not (ui-capability-profile
+                    'palette-selector #f '(palette-callback)
+                    'preferred-profile)))))
+
 ;; Every TYPE registered before link retains its profile API.
 (check 'all-existing-types-backward-compatible
        (and (equal? (ui-profile 'rotary-slider 'compact)
@@ -451,7 +548,9 @@
             (equal? (ui-profile 'header 'standard)
                     '((width . 24) (height . 3)))
             (equal? (ui-profile 'footer 'standard)
-                    '((width . 24) (height . 3)))))
+                    '((width . 24) (height . 3)))
+            (equal? (ui-profile 'link 'standard)
+                    '((width . 12) (height . 2)))))
 
 ;; Recheck both pre-existing profile APIs after registering new TYPEs.
 (check 'rotary-backward-compatibility-after-extension
