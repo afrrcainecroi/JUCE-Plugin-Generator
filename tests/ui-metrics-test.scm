@@ -202,6 +202,72 @@
              '((text-length-class . long)))
             'extended))
 
+(let* ((metrics (ui-metrics 'label))
+       (technical-min (field metrics 'technical-min))
+       (content-dependent (field metrics 'content-dependent)))
+  (check 'label-present metrics)
+  (check 'label-technical-min-not-normative
+         (and (not (field technical-min 'normative?))
+              (eq? (field technical-min 'status) 'to-be-derived)
+              (not (field technical-min 'width))
+              (not (field technical-min 'height))))
+  (check 'label-base-contract
+         (and (equal? (field metrics 'visual-min)
+                      '((width . 8) (height . 2)))
+              (equal? (field metrics 'preferred)
+                      '((width . 12) (height . 3)))
+              (equal? (field metrics 'useful-max)
+                      '((width . 16) (height . 4)))
+              (eq? (field metrics 'visual-min-profile) 'compact)
+              (eq? (field metrics 'preferred-profile) 'standard)
+              (eq? (field metrics 'useful-max-profile) 'extended)))
+  (check 'label-profiles
+         (and (equal? (ui-profile 'label 'compact)
+                      '((width . 8) (height . 2)))
+              (equal? (ui-profile 'label 'standard)
+                      '((width . 12) (height . 3)))
+              (equal? (ui-profile 'label 'extended)
+                      '((width . 16) (height . 4)))))
+  (check 'label-capabilities
+         (equal? (field metrics 'capabilities)
+                 '(text font-size font-style
+                   minimum-horizontal-scale justification)))
+  (check 'label-content-dependent-metadata
+         (and content-dependent
+              (assoc 'text-length content-dependent)
+              (assoc 'font-size content-dependent)
+              (assoc 'minimum-horizontal-scale content-dependent)
+              (eq? (field (field content-dependent 'font-style)
+                          'footprint-effect)
+                   'not-significant-in-current-matrix)
+              (eq? (field (field content-dependent 'justification)
+                          'minimum-footprint-effect)
+                   'none)))
+  (check 'label-long-text-prefers-extended
+         (eq? (ui-capability-profile
+               'label #f '(text) 'preferred-profile
+               '((text-length-class . long)))
+              'extended))
+  (check 'label-large-font-prefers-at-least-standard
+         (eq? (ui-capability-profile
+               'label #f '(font-size) 'preferred-profile
+               '((font-size-class . large)))
+              'standard))
+  (check 'label-long-large-prefers-extended
+         (eq? (ui-capability-profile
+               'label #f '(text font-size) 'preferred-profile
+               '((text-length-class . long)
+                 (font-size-class . large)))
+              'extended))
+  (check 'label-justification-does-not-change-minimum
+         (not (ui-capability-profile
+               'label #f '(justification) 'minimum-visual-profile
+               '((justification . right)))))
+  (check 'label-font-style-does-not-change-profile
+         (not (ui-capability-profile
+               'label #f '(font-style) 'preferred-profile
+               '((font-style . bold))))))
+
 ;; Recheck both pre-existing profile APIs after registering new TYPEs.
 (check 'rotary-backward-compatibility-after-extension
        (equal? (ui-profile 'rotary-slider 'compact)
