@@ -13,7 +13,7 @@
 # Dedicated DSL UI metric tests
 !tests/
 tests/*
-!tests/rotary-metrics-test.scm
+!tests/*.scm
 
 # Generator sources
 !generator-app/
