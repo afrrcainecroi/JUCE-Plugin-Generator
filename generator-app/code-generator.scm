@@ -212,6 +212,10 @@
 	       generate-myplugin-audio-init-code
 	       generate-myplugin-prepare-code
 	       generate-myplugin-reset-code
+	       generate-latency-prepare-code
+	       generate-latency-runtime-members-code
+	       generate-process-wet-latency-code
+	       
 	       )
   )
 
@@ -311,41 +315,4 @@
 ;;                reference))
 ;;       (else ""))))
 
-(define-public (generate-oversampling-prepare-code)
-  (if (role-present? 'oversampling)
-      "    // OVERSAMPLING
-const auto processingChannels =
-    static_cast<juce::uint32>(
-        juce::jmax(
-            1,
-            juce::jmax(
-                getTotalNumInputChannels(),
-                getTotalNumOutputChannels())));
-    oversampling2x =
-        std::make_unique<juce::dsp::Oversampling<float>>(
-            static_cast<size_t>(processingChannels),
-            1,
-            juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR);
 
-    oversampling4x =
-        std::make_unique<juce::dsp::Oversampling<float>>(
-            static_cast<size_t>(processingChannels),
-            2,
-            juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR);
-
-    oversampling8x =
-        std::make_unique<juce::dsp::Oversampling<float>>(
-            static_cast<size_t>(processingChannels),
-            3,
-            juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR);
-
-    oversampling2x->initProcessing(samplesPerBlock);
-    oversampling4x->initProcessing(samplesPerBlock);
-    oversampling8x->initProcessing(samplesPerBlock);
-
-    oversampling2x->reset();
-    oversampling4x->reset();
-    oversampling8x->reset();
-
-"
-      ""))

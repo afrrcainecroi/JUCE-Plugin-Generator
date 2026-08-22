@@ -166,7 +166,7 @@
 		   "\n"
 		   (generate-dsp-runtime-members-code))
   
-  (AppendStringTo *OVERSAMPLING_PPC* (generate-oversampling-prepare-code))
+  (AppendStringTo *OVERSAMPLING_PPC* (generate-oversampling-prepare-code) "\n" (generate-latency-prepare-code))
   (AppendStringTo *OVERSAMPLING_PPCRR* (generate-oversampling-release-code))
   (AppendStringTo *FFT_INFRASTRUCTURE* "\n" (generate-fft-infrastructure-code))
   (AppendStringTo *FFT_MYPLUGIN_MEMBERS* "\n" (generate-myplugin-fft-members-code))
@@ -1796,7 +1796,43 @@ var id var))
   #:row 16
   #:col 13
   #:row-span 7
-  #:col-span 8) 
+  #:col-span 8)
+
+ (make <normal-toggle-button>
+  #:id "Bypass"
+  #:role 'bypass
+
+  #:parameter-id "bypass"
+  #:parameter-name "Bypass"
+  #:processor-reference "bypass"
+  #:version-hint 1
+
+  #:title "BYPASS"
+
+  #:default 0.0
+
+  #:row 21
+  #:col 4
+  #:row-span 2
+  #:col-span 5)
+
+ (make <normal-toggle-button>
+  #:id "DSP Bypass"
+  #:role 'dsp-bypass
+
+  #:parameter-id "dspBypass"
+  #:parameter-name "DSP Bypass"
+  #:processor-reference "dspBypass"
+  #:version-hint 1
+
+  #:title "DSP BYPASS"
+
+  #:default 0.0
+
+  #:row 21
+  #:col 10
+  #:row-span 2
+  #:col-span 5)
 
   )
 
