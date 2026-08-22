@@ -169,17 +169,24 @@
   (AppendStringTo *OVERSAMPLING_PPC* (generate-oversampling-prepare-code) "\n" (generate-latency-prepare-code))
   (AppendStringTo *OVERSAMPLING_PPCRR* (generate-oversampling-release-code))
   (AppendStringTo *FFT_INFRASTRUCTURE* "\n" (generate-fft-infrastructure-code))
-  (AppendStringTo *FFT_MYPLUGIN_MEMBERS* "\n" (generate-myplugin-fft-members-code))
-  (AppendStringTo *MYPLUGIN_FFT_INIT* "\n"
-                (generate-myplugin-audio-init-code)
-                "\n"
-                (generate-myplugin-fft-init-code))
+  
+  (AppendStringTo *FFT_MYPLUGIN_MEMBERS* "\n" (generate-myplugin-fft-members-code) "\n" (generate-myplugin-developer-latency-declaration-code))
+
+  (AppendStringTo *MYPLUGIN_FFT_INIT* "\n" (generate-myplugin-audio-init-code) "\n" (generate-myplugin-fft-init-code))
   (AppendStringTo
  *MYPLUGIN_PREPARE*
  "\n"
  (generate-myplugin-prepare-code))
   (AppendStringTo *MYPLUGIN_PROCESS_AUDIO_BUFFER* "\n" (generate-myplugin-process-audio-buffer-code))
-  (AppendStringTo *MYPLUGIN_PROCESS_AUDIO_BLOCK* "\n" (generate-myplugin-process-audio-block-code))
+  (AppendStringTo *MYPLUGIN_PROCESS_AUDIO_BLOCK* "\n"
+		  (generate-myplugin-process-audio-block-code) "\n"
+		  )
+
+  (AppendStringTo
+   *MYPLUGIN_DEVELOPER_LATENCY*
+   "\n"
+   (generate-myplugin-developer-latency-code))
+  
   (AppendStringTo *MYPLUGIN_RESET* "\n" (generate-myplugin-reset-code))
 
   ;;
@@ -248,6 +255,12 @@
  *MYPLUGIN_RESET::START*
  *MYPLUGIN_RESET::END*
  *MYPLUGIN_RESET*)
+
+    (replace-between-flags
+ MyPlugin.cpp
+ *MYPLUGIN_DEVELOPER_LATENCY::START*
+ *MYPLUGIN_DEVELOPER_LATENCY::END*
+ *MYPLUGIN_DEVELOPER_LATENCY*)
     ;;
     ;;FFT
     (replace-between-flags Synth.h *FFT_INFRASTRUCTURE::START* *FFT_INFRASTRUCTURE::END* *FFT_INFRASTRUCTURE*)

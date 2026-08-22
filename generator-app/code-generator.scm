@@ -215,7 +215,8 @@
 	       generate-latency-prepare-code
 	       generate-latency-runtime-members-code
 	       generate-process-wet-latency-code
-	       
+	       generate-myplugin-developer-latency-declaration-code
+	       generate-myplugin-developer-latency-code
 	       )
   )
 

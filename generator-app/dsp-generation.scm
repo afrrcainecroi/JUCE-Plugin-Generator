@@ -25,6 +25,8 @@
 	    generate-latency-runtime-members-code
 	    generate-process-wet-latency-code
 	    generate-process-dry-latency-code
+	    generate-myplugin-developer-latency-code
+	    generate-myplugin-developer-latency-declaration-code
 	    ))
 
 (define-public (generate-process-code)
@@ -1665,6 +1667,7 @@ private:
 
     int generatedMaximumFFTLatency = 0;
     int generatedMaximumOversamplingLatency = 0;
+    int generatedMaximumDeveloperLatency = 0;
 
 "
 
@@ -1693,13 +1696,33 @@ private:
              "")
 
          ;; ------------------------------------------------------
+         ;; MAXIMUM DEVELOPER DSP LATENCY
+         ;; ------------------------------------------------------
+
+         "
+    if (myplugin != nullptr)
+    {
+        generatedMaximumDeveloperLatency =
+            juce::jmax(
+                myplugin->getDeveloperLatencySamples(1),
+                juce::jmax(
+                    myplugin->getDeveloperLatencySamples(2),
+                    juce::jmax(
+                        myplugin->getDeveloperLatencySamples(4),
+                        myplugin->getDeveloperLatencySamples(8))));
+    }
+
+"
+
+         ;; ------------------------------------------------------
          ;; FIXED GLOBAL LATENCY + DELAY BUFFERS
          ;; ------------------------------------------------------
 
          "
     generatedMaximumLatencySamples =
         generatedMaximumFFTLatency
-        + generatedMaximumOversamplingLatency;
+        + generatedMaximumOversamplingLatency
+        + generatedMaximumDeveloperLatency;
 
     generatedActualLatencySamples = 0;
 
@@ -1739,7 +1762,8 @@ private:
 
 
     // La latenza vista dall'host rimane costante
-    // per tutte le configurazioni FFT / oversampling.
+    // per tutte le configurazioni FFT / oversampling /
+    // developer DSP.
     setLatencySamples(
         generatedMaximumLatencySamples);
 
@@ -1773,191 +1797,7 @@ private:
       ""))
 
 
-(define-public (generate-process-wet-latency-code)
-  (let ((fft
-         (fft-model))
-        (oversampling
-         (oversampling-model))
-	(dsp-bypass
-	 (find-component-by-role 'dsp-bypass))
-	)
 
-    (if (or fft oversampling)
-
-        (string-append
-
-         "
-    // ==========================================================
-    // GENERATED WET LATENCY COMPENSATION
-    // ==========================================================
-
-    generatedActualLatencySamples = 0;
-
-"
-
-         ;; FFT latency
-         (if fft
-             (let ((ref
-                    (assoc-ref fft
-                               'processor-reference)))
-               (format #f
-		       "
-    switch (static_cast<int>(value_~a))
-    {
-        case 1:
-            generatedActualLatencySamples += 256;
-            break;
-
-        case 2:
-            generatedActualLatencySamples += 512;
-            break;
-
-        case 3:
-            generatedActualLatencySamples += 1024;
-            break;
-
-        case 4:
-            generatedActualLatencySamples += 2048;
-            break;
-
-        case 5:
-            generatedActualLatencySamples += 4096;
-            break;
-
-        case 6:
-            generatedActualLatencySamples += 8192;
-            break;
-
-        default:
-            break;
-    }
-
-"
-                       ref))
-             "")
-
-         ;; Oversampling latency
-         (if oversampling
-             (let ((ref
-                    (assoc-ref oversampling
-                               'processor-reference)))
-               (format #f
-"
-    switch (static_cast<int>(value_~a))
-    {
-        case 1:
-            generatedActualLatencySamples +=
-                juce::roundToInt(
-                    oversampling2x->getLatencyInSamples());
-            break;
-
-        case 2:
-            generatedActualLatencySamples +=
-                juce::roundToInt(
-                    oversampling4x->getLatencyInSamples());
-            break;
-
-        case 3:
-            generatedActualLatencySamples +=
-                juce::roundToInt(
-                    oversampling8x->getLatencyInSamples());
-            break;
-
-        default:
-            break;
-    }
-
-"
-                       ref))
-             "")
-
-	 ;; ------------------------------------------------------
-         ;; DSP BYPASS
-         ;;
-         ;; Se tutta la catena DSP viene bypassata, la sua latenza
-         ;; effettiva è zero. Il compensatore WET deve quindi
-         ;; introdurre l'intera latenza fissa.
-         ;; ------------------------------------------------------
-
-         (if dsp-bypass
-             (let ((ref
-                    (assoc-ref dsp-bypass
-                               'processor-reference)))
-               (format #f
-		       "
-    if (value_~a >= 0.5f)
-    {
-        generatedActualLatencySamples = 0;
-    }
-
-"
-                       ref))
-             "")
-
-         "
-    const int generatedWetDelaySamples =
-        juce::jmax(
-            0,
-            generatedMaximumLatencySamples
-            - generatedActualLatencySamples);
-
-
-    if (generatedWetDelaySamples > 0)
-    {
-        const int generatedDelayBufferSize =
-            generatedWetDelayBuffer.getNumSamples();
-
-        const int generatedNumChannels =
-            juce::jmin(
-                buffer.getNumChannels(),
-                generatedWetDelayBuffer.getNumChannels());
-
-        for (int sample = 0;
-             sample < buffer.getNumSamples();
-             ++sample)
-        {
-            int readPosition =
-                generatedWetDelayWritePosition
-                - generatedWetDelaySamples;
-
-            if (readPosition < 0)
-                readPosition += generatedDelayBufferSize;
-
-            for (int ch = 0;
-                 ch < generatedNumChannels;
-                 ++ch)
-            {
-                auto* wet =
-                    buffer.getWritePointer(ch);
-
-                auto* delay =
-                    generatedWetDelayBuffer
-                        .getWritePointer(ch);
-
-                const float input =
-                    wet[sample];
-
-                wet[sample] =
-                    delay[readPosition];
-
-                delay[
-                    generatedWetDelayWritePosition]
-                    = input;
-            }
-
-            ++generatedWetDelayWritePosition;
-
-            if (generatedWetDelayWritePosition
-                >= generatedDelayBufferSize)
-            {
-                generatedWetDelayWritePosition = 0;
-            }
-        }
-    }
-
-")
-
-        "")))
 
 
 
@@ -2030,3 +1870,278 @@ private:
 
 
 
+(define-public (generate-myplugin-developer-latency-code)
+  "
+int MyPlugin::getDeveloperLatencySamples(
+    int oversamplingFactor) const noexcept
+{
+    switch (oversamplingFactor)
+    {
+        case 2:
+            return realPlugin2x->getLatencySamples();
+
+        case 4:
+            return realPlugin4x->getLatencySamples();
+
+        case 8:
+            return realPlugin8x->getLatencySamples();
+
+        default:
+            return realPlugin1x->getLatencySamples();
+    }
+}
+")
+
+(define-public (generate-myplugin-developer-latency-declaration-code)
+  "
+    int getDeveloperLatencySamples(
+        int oversamplingFactor) const noexcept;
+")
+
+
+(define-public (generate-process-wet-latency-code)
+  (let* ((fft
+          (fft-model))
+         (oversampling
+          (oversampling-model))
+         (dsp-bypass
+          (find-component-by-role 'dsp-bypass))
+         (os-ref
+          (and oversampling
+               (assoc-ref oversampling
+                          'processor-reference))))
+
+    (if (or fft oversampling)
+
+        (string-append
+
+         "
+    // ==========================================================
+    // GENERATED WET LATENCY COMPENSATION
+    // ==========================================================
+
+    generatedActualLatencySamples = 0;
+
+"
+
+         ;; ======================================================
+         ;; FFT latency
+         ;; ======================================================
+
+         (if fft
+             (let ((ref
+                    (assoc-ref fft
+                               'processor-reference)))
+               (format #f
+"
+    switch (static_cast<int>(value_~a))
+    {
+        case 1:
+            generatedActualLatencySamples += 256;
+            break;
+
+        case 2:
+            generatedActualLatencySamples += 512;
+            break;
+
+        case 3:
+            generatedActualLatencySamples += 1024;
+            break;
+
+        case 4:
+            generatedActualLatencySamples += 2048;
+            break;
+
+        case 5:
+            generatedActualLatencySamples += 4096;
+            break;
+
+        case 6:
+            generatedActualLatencySamples += 8192;
+            break;
+
+        default:
+            break;
+    }
+
+"
+                       ref))
+             "")
+
+         ;; ======================================================
+         ;; Oversampling latency
+         ;; ======================================================
+
+         (if oversampling
+             (let ((ref
+                    (assoc-ref oversampling
+                               'processor-reference)))
+               (format #f
+"
+    switch (static_cast<int>(value_~a))
+    {
+        case 1:
+            generatedActualLatencySamples +=
+                juce::roundToInt(
+                    oversampling2x->getLatencyInSamples());
+            break;
+
+        case 2:
+            generatedActualLatencySamples +=
+                juce::roundToInt(
+                    oversampling4x->getLatencyInSamples());
+            break;
+
+        case 3:
+            generatedActualLatencySamples +=
+                juce::roundToInt(
+                    oversampling8x->getLatencyInSamples());
+            break;
+
+        default:
+            break;
+    }
+
+"
+                       ref))
+             "")
+
+         ;; ======================================================
+         ;; Developer DSP latency
+         ;;
+         ;; RealPlugin::getLatencySamples() restituisce la latenza
+         ;; del DSP developer espressa in campioni host.
+         ;; ======================================================
+
+         (if oversampling
+             (format #f
+"
+    {
+        int generatedOversamplingFactor = 1;
+
+        switch (static_cast<int>(value_~a))
+        {
+            case 1:
+                generatedOversamplingFactor = 2;
+                break;
+
+            case 2:
+                generatedOversamplingFactor = 4;
+                break;
+
+            case 3:
+                generatedOversamplingFactor = 8;
+                break;
+
+            default:
+                break;
+        }
+
+        generatedActualLatencySamples +=
+            myplugin->getDeveloperLatencySamples(
+                generatedOversamplingFactor);
+    }
+
+"
+                     os-ref)
+
+             "
+    generatedActualLatencySamples +=
+        myplugin->getDeveloperLatencySamples(1);
+
+")
+
+         ;; ======================================================
+         ;; DSP BYPASS
+         ;;
+         ;; Se tutta la catena DSP viene bypassata:
+         ;;
+         ;;     FFT + oversampling + developer DSP
+         ;;
+         ;; non vengono eseguiti e quindi la latenza naturale
+         ;; della wet path diventa zero.
+         ;; ======================================================
+
+         (if dsp-bypass
+             (let ((ref
+                    (assoc-ref dsp-bypass
+                               'processor-reference)))
+               (format #f
+"
+    if (value_~a >= 0.5f)
+    {
+        generatedActualLatencySamples = 0;
+    }
+
+"
+                       ref))
+             "")
+
+         ;; ======================================================
+         ;; Compensazione fino alla latenza fissa
+         ;; ======================================================
+
+         "
+    const int generatedWetDelaySamples =
+        juce::jmax(
+            0,
+            generatedMaximumLatencySamples
+            - generatedActualLatencySamples);
+
+
+    if (generatedWetDelaySamples > 0)
+    {
+        const int generatedDelayBufferSize =
+            generatedWetDelayBuffer.getNumSamples();
+
+        const int generatedNumChannels =
+            juce::jmin(
+                buffer.getNumChannels(),
+                generatedWetDelayBuffer.getNumChannels());
+
+        for (int sample = 0;
+             sample < buffer.getNumSamples();
+             ++sample)
+        {
+            int readPosition =
+                generatedWetDelayWritePosition
+                - generatedWetDelaySamples;
+
+            if (readPosition < 0)
+                readPosition += generatedDelayBufferSize;
+
+            for (int ch = 0;
+                 ch < generatedNumChannels;
+                 ++ch)
+            {
+                auto* wet =
+                    buffer.getWritePointer(ch);
+
+                auto* delay =
+                    generatedWetDelayBuffer
+                        .getWritePointer(ch);
+
+                const float input =
+                    wet[sample];
+
+                wet[sample] =
+                    delay[readPosition];
+
+                delay[
+                    generatedWetDelayWritePosition]
+                    = input;
+            }
+
+            ++generatedWetDelayWritePosition;
+
+            if (generatedWetDelayWritePosition
+                >= generatedDelayBufferSize)
+            {
+                generatedWetDelayWritePosition = 0;
+            }
+        }
+    }
+
+")
+
+        "")))
