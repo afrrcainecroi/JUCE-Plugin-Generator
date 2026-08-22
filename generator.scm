@@ -122,6 +122,9 @@
                   (generate-member-declarations))
 
   (AppendStringTo *DECLARATIONS*
+                  (generate-link-runtime-declarations-code))
+
+  (AppendStringTo *DECLARATIONS*
                   (generate-attachment-declarations))
 
   (AppendStringTo *INTERFACE*
@@ -157,6 +160,10 @@
   (AppendStringTo *FOOTER_TIMER*
                   "\n"
                   (generate-footer-timer-code))
+
+  (AppendStringTo *FOOTER_MOUSE*
+                  "\n"
+                  (generate-footer-mouse-code))
 
   (AppendStringTo *TIMER*
                   "\n"

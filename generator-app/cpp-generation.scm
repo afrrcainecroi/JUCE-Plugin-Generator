@@ -1,9 +1,11 @@
 (define-module (generator-app cpp-generation)
   #:use-module (ice-9 format)
   #:use-module (oop goops)
+  #:use-module (srfi srfi-1)
   #:use-module (generator-app generation-protocols)
   #:use-module (generator-app dsl-model)
   #:use-module (generator-app registration)
+  #:use-module (generator-app generation-state)
   #:use-module (generator-app cpp-generation-common)
   #:re-export (component->member-declaration
                model->member-declaration
@@ -14,7 +16,11 @@
                model->dparams-code
                model->getparams-code
                model->valueparams-code
-               model->destroy-code))
+               model->destroy-code)
+  #:export (generate-link-runtime-declarations-code
+            generate-footer-mouse-code
+            generate-footer-mouse-exit-code
+            generate-footer-timer-code))
 
 (define (error message . args)
   (scm-error 'misc-error
@@ -218,25 +224,36 @@
       ;; ----------------------------------------------------------
 
       ((link)
-       (string-append
-        (label-properties->cpp model)
+       (let ((url (assoc-ref model 'url)))
+         (string-append
+          (label-properties->cpp model)
 
-        ;; Il nome viene utilizzato anche dalla gestione
-        ;; dell'interazione mouse.
-        (format #f
-                "~a.setName(\"~a\");~%"
-                var
-                (cpp-string var))
+          ;; URL and normal colour are behavioural PROPERTY values belonging
+          ;; to this link instance. They are not shared RESOURCE data.
+          (format #f
+                  "~a.getProperties().set(\"generatedLinkUrl\", \"~a\");~%"
+                  var
+                  (cpp-string url))
+          (format #f
+                  "~a.getProperties().set(\"generatedLinkNormalColour\", static_cast<juce::int64>(~a.findColour(juce::Label::textColourId).getARGB()));~%"
+                  var var)
 
-        ;; Comportamento visuale specifico di un link.
-        (format #f
-                "~a.setMouseCursor(juce::MouseCursor::PointingHandCursor);~%"
-                var)
+          ;; Il nome viene utilizzato anche dalla gestione
+          ;; dell'interazione mouse.
+          (format #f
+                  "~a.setName(\"~a\");~%"
+                  var
+                  (cpp-string var))
 
-        ;; Il PluginEditor riceve gli eventi mouse del link.
-        (format #f
-                "~a.addMouseListener(this, false);~%"
-                var)))
+          ;; The pointing hand is restricted to the fitted text area.
+          (format #f
+                  "~a.setMouseCursor(juce::MouseCursor::NormalCursor);~%"
+                  var)
+
+          ;; Il PluginEditor riceve gli eventi mouse del link.
+          (format #f
+                  "~a.addMouseListener(this, false);~%"
+                  var))))
       
       ((selector)
        (selector-constructor-code model))
@@ -245,6 +262,107 @@
         (selector-constructor-code model)
         (palette-selector-callback->cpp model)))
       (else ""))))
+
+(define (link-models)
+  (filter (lambda (model)
+            (eq? (assoc-ref model 'type) 'link))
+          (reverse (generation-components))))
+
+(define-public (generate-link-runtime-declarations-code)
+  (if (null? (link-models))
+      ""
+      (string-append "
+juce::Rectangle<int> generatedLinkTextArea(juce::Label& link) const
+{
+    juce::GlyphArrangement glyphs;
+    glyphs.addFittedText(link.getFont(),
+                         link.getText(),
+                         0.0f,
+                         0.0f,
+                         static_cast<float>(link.getWidth()),
+                         static_cast<float>(link.getHeight()),
+                         link.getJustificationType(),
+                         1,
+                         link.getMinimumHorizontalScale());
+
+    return glyphs.getBoundingBox(0, -1, true)
+                 .getSmallestIntegerContainer()
+                 .getIntersection(link.getLocalBounds());
+}
+
+juce::Colour generatedLinkNormalColour(juce::Label& link) const
+{
+    return juce::Colour(static_cast<juce::uint32>(
+        static_cast<juce::int64>(
+            link.getProperties()[\"generatedLinkNormalColour\"])));
+}
+\nvoid mouseExit(const juce::MouseEvent& event) override
+{
+"
+                     (generate-footer-mouse-exit-code)
+                     "}
+")))
+
+(define-public (generate-footer-mouse-code)
+  (apply
+   string-append
+   (map
+    (lambda (model)
+      (let ((var (assoc-ref model 'var)))
+        (format #f
+"if (event.eventComponent == &~a)
+{
+    const auto mousePosition = event.getEventRelativeTo(&~a).getPosition();
+    if (generatedLinkTextArea(~a).contains(mousePosition))
+    {
+        juce::URL(~a.getProperties()[\"generatedLinkUrl\"].toString())
+            .launchInDefaultBrowser();
+    }
+}
+"
+                var var var var)))
+    (link-models))))
+
+(define-public (generate-footer-mouse-exit-code)
+  (apply
+   string-append
+   (map
+    (lambda (model)
+      (let ((var (assoc-ref model 'var)))
+        (format #f
+"if (event.eventComponent == &~a)
+{
+    ~a.setMouseCursor(juce::MouseCursor::NormalCursor);
+    ~a.setColour(juce::Label::textColourId,
+                 generatedLinkNormalColour(~a));
+}
+"
+                var var var var)))
+    (link-models))))
+
+(define-public (generate-footer-timer-code)
+  (apply
+   string-append
+   (map
+    (lambda (model)
+      (let ((var (assoc-ref model 'var)))
+        (format #f
+"if (~a.isMouseOver())
+{
+    const auto isOverText = generatedLinkTextArea(~a).contains(
+        ~a.getMouseXYRelative());
+
+    ~a.setMouseCursor(isOverText
+        ? juce::MouseCursor::PointingHandCursor
+        : juce::MouseCursor::NormalCursor);
+    ~a.setColour(juce::Label::textColourId,
+                 isOverText
+                     ? kineticLNF.currentPalette.neonWhite
+                     : generatedLinkNormalColour(~a));
+}
+"
+                var var var var var var)))
+    (link-models))))
 
 (define-method (model->attachment-declaration (model <list>))
   (let ((type (assoc-ref model 'type))

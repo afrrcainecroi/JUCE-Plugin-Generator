@@ -188,6 +188,8 @@
                generate-process-wetdry-prefix
                generate-paint-over-children-code
 	       generate-footer-timer-code
+	       generate-footer-mouse-code
+	       generate-link-runtime-declarations-code
 	       generate-timer-code
 	       generate-member-declarations
                generate-constructor-code
@@ -315,5 +317,4 @@
 ;;                reference
 ;;                reference))
 ;;       (else ""))))
-
 

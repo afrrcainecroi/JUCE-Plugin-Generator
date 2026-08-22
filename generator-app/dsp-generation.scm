@@ -4,7 +4,6 @@
   #:export (generate-process-code
             generate-process-wetdry-prefix
             generate-paint-over-children-code
-	    generate-footer-timer-code
 	    generate-timer-code
 	    generate-dsp-runtime-members-code
 	    generate-oversampling-prepare-code
@@ -548,45 +547,6 @@
 "
                   ref min max min))
         "")))
-
-(define-public (generate-footer-timer-code)
-  (let ((model (find-component-by-type 'link)))
-    (if model
-        (let ((var (assoc-ref model 'var)))
-          (format #f
-"if (~a.isMouseOver())
-{
-    auto mousePos = ~a.getMouseXYRelative();
-
-    auto font  = ~a.getFont();
-    auto textW = font.getStringWidth(~a.getText());
-    auto textH = juce::roundToInt(font.getHeight());
-
-    juce::Rectangle<int> activeArea(
-        0,
-        ~a.getHeight() - textH,
-        textW,
-        textH);
-
-    if (activeArea.contains(mousePos))
-    {
-        ~a.setMouseCursor(juce::MouseCursor::PointingHandCursor);
-        ~a.setColour(
-            juce::Label::textColourId,
-            kineticLNF.currentPalette.neonWhite);
-    }
-    else
-    {
-        ~a.setMouseCursor(juce::MouseCursor::NormalCursor);
-        ~a.setColour(
-            juce::Label::textColourId,
-            kineticLNF.currentPalette.neonWhite.withAlpha(0.6f));
-    }
-}
-"
-                  var var var var var var var var var))
-        "")))
-
 
 (define-public (generate-timer-code)
   (string-append
