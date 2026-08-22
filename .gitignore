@@ -10,6 +10,11 @@
 # Entry point
 !generator.scm
 
+# Dedicated DSL UI metric tests
+!tests/
+tests/*
+!tests/rotary-metrics-test.scm
+
 # Generator sources
 !generator-app/
 generator-app/*
