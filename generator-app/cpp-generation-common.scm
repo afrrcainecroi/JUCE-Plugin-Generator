@@ -204,8 +204,7 @@
   (let ((var
          (assoc-ref model 'var)))
     (format #f
-"~a.setWantsKeyboardFocus(false);
-~a.onChange = [this]
+"~a.onChange = [this]
 {
     KineticLookAndFeel::PaletteType type;
     switch (~a.getSelectedId())
@@ -235,10 +234,7 @@
     kineticLNF.animatePaletteChange(type, 2000);
     repaint();
 };
-~a.setWantsKeyboardFocus(true);
 "
-            var
-            var
             var
             var)))
 
