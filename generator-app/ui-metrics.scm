@@ -352,3 +352,109 @@
          . ((capabilities-all . (font-size))
             (font-size-class . large)))
         (preferred-profile . standard))))))
+
+(register-ui-metrics!
+ 'header
+ '((technical-min
+    . ((normative? . #f)
+       (status . to-be-derived)
+       (width . #f)
+       (height . #f)))
+   ;; Header sizing remains content-dependent. These base profiles describe
+   ;; the single-line horizontal banner observed by the visual matrix.
+   (visual-min . ((width . 16) (height . 2)))
+   (preferred . ((width . 24) (height . 3)))
+   (useful-max . ((width . 32) (height . 4)))
+   (visual-min-profile . compact)
+   (preferred-profile . standard)
+   (useful-max-profile . extended)
+   (profiles
+    . ((compact . ((width . 16) (height . 2)))
+       (standard . ((width . 24) (height . 3)))
+       (extended . ((width . 32) (height . 4)))))
+   (natural-geometry
+    . ((form . horizontal-banner)
+       (lines . single)))
+   (capabilities
+    . (text font-size font-style justification))
+   (content-dependent
+    . ((text-length
+        . ((effect . preferred-profile)
+           (classification . descriptive-advisory)))
+       (font-size
+        . ((effect . preferred-profile)
+           (classification . descriptive-advisory)))
+       (font-style
+        . ((footprint-effect . not-significant-in-current-matrix)))
+       (justification
+        . ((footprint-effect . none)
+           (minimum-footprint-effect . none)))))
+   ;; Content rules are advisory metadata only. They do not alter visual-min
+   ;; and are not consumed by the current layout implementation.
+   (capability-rules
+    . (((when
+         . ((capabilities-all . (text font-size))
+            (text-length-class . long)
+            (font-size-class . large)))
+        (preferred-profile . extended))
+       ((when
+         . ((capabilities-all . (text))
+            (text-length-class . long)))
+        (preferred-profile . extended))
+       ((when
+         . ((capabilities-all . (font-size))
+            (font-size-class . large)))
+        (preferred-profile . extended))))))
+
+(register-ui-metrics!
+ 'footer
+ '((technical-min
+    . ((normative? . #f)
+       (status . to-be-derived)
+       (width . #f)
+       (height . #f)))
+   ;; Footer sizing remains content-dependent. These base profiles describe
+   ;; the thin single-line horizontal banner observed by the visual matrix.
+   (visual-min . ((width . 16) (height . 2)))
+   (preferred . ((width . 24) (height . 3)))
+   (useful-max . ((width . 32) (height . 4)))
+   (visual-min-profile . compact)
+   (preferred-profile . standard)
+   (useful-max-profile . extended)
+   (profiles
+    . ((compact . ((width . 16) (height . 2)))
+       (standard . ((width . 24) (height . 3)))
+       (extended . ((width . 32) (height . 4)))))
+   (natural-geometry
+    . ((form . thin-horizontal-banner)
+       (lines . single)))
+   (capabilities
+    . (text font-size font-style justification margin-tb margin-lr))
+   (content-dependent
+    . ((text-length
+        . ((effect . preferred-profile)
+           (classification . descriptive-advisory)))
+       (font-size
+        . ((effect . preferred-profile)
+           (classification . descriptive-advisory)))
+       (margin-tb
+        . ((effect . minimum-visual-profile)
+           (classification . descriptive-advisory)))
+       (margin-lr
+        . ((classification . descriptive-advisory)))
+       (font-style
+        . ((footprint-effect . not-significant-in-current-matrix)))
+       (justification
+        . ((footprint-effect . none)
+           (minimum-footprint-effect . none)))))
+   ;; margin-tb-class is descriptive: this contract intentionally defines no
+   ;; numeric threshold and does not change the helper's margin-tb default.
+   (capability-rules
+    . (((when
+         . ((capabilities-all . (text))
+            (text-length-class . long)))
+        (preferred-profile . extended))
+       ((when
+         . ((capabilities-all . (margin-tb))
+            (margin-tb-class . large)))
+        (minimum-visual-profile . extended))))))

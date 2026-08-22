@@ -268,6 +268,110 @@
                'label #f '(font-style) 'preferred-profile
                '((font-style . bold))))))
 
+(define (check-banner-contract type expected-capabilities expected-form)
+  (let* ((metrics (ui-metrics type))
+         (technical-min (field metrics 'technical-min))
+         (content-dependent (field metrics 'content-dependent))
+         (natural-geometry (field metrics 'natural-geometry)))
+    (check (list type 'present) metrics)
+    (check (list type 'technical-min-not-normative)
+           (and (not (field technical-min 'normative?))
+                (eq? (field technical-min 'status) 'to-be-derived)
+                (not (field technical-min 'width))
+                (not (field technical-min 'height))))
+    (check (list type 'profiles)
+           (and (equal? (ui-profile type 'compact)
+                        '((width . 16) (height . 2)))
+                (equal? (ui-profile type 'standard)
+                        '((width . 24) (height . 3)))
+                (equal? (ui-profile type 'extended)
+                        '((width . 32) (height . 4)))))
+    (check (list type 'base-contract)
+           (and (equal? (field metrics 'visual-min)
+                        '((width . 16) (height . 2)))
+                (equal? (field metrics 'preferred)
+                        '((width . 24) (height . 3)))
+                (equal? (field metrics 'useful-max)
+                        '((width . 32) (height . 4)))
+                (eq? (field metrics 'visual-min-profile) 'compact)
+                (eq? (field metrics 'preferred-profile) 'standard)
+                (eq? (field metrics 'useful-max-profile) 'extended)))
+    (check (list type 'natural-geometry)
+           (and (eq? (field natural-geometry 'form) expected-form)
+                (eq? (field natural-geometry 'lines) 'single)))
+    (check (list type 'capabilities)
+           (equal? (field metrics 'capabilities) expected-capabilities))
+    (check (list type 'content-dependent)
+           (and content-dependent
+                (assoc 'text-length content-dependent)
+                (assoc 'font-size content-dependent)
+                (eq? (field (field content-dependent 'font-style)
+                            'footprint-effect)
+                     'not-significant-in-current-matrix)
+                (eq? (field (field content-dependent 'justification)
+                            'minimum-footprint-effect)
+                     'none)))))
+
+(check-banner-contract
+ 'header
+ '(text font-size font-style justification)
+ 'horizontal-banner)
+(check-banner-contract
+ 'footer
+ '(text font-size font-style justification margin-tb margin-lr)
+ 'thin-horizontal-banner)
+
+(check 'header-long-text-prefers-extended
+       (eq? (ui-capability-profile
+             'header #f '(text) 'preferred-profile
+             '((text-length-class . long)))
+            'extended))
+(check 'header-large-font-prefers-extended
+       (eq? (ui-capability-profile
+             'header #f '(font-size) 'preferred-profile
+             '((font-size-class . large)))
+            'extended))
+(check 'header-long-large-prefers-extended
+       (eq? (ui-capability-profile
+             'header #f '(text font-size) 'preferred-profile
+             '((text-length-class . long)
+               (font-size-class . large)))
+            'extended))
+(check 'footer-long-text-prefers-extended
+       (eq? (ui-capability-profile
+             'footer #f '(text) 'preferred-profile
+             '((text-length-class . long)))
+            'extended))
+(check 'footer-large-margin-tb-requires-extended
+       (eq? (ui-capability-profile
+             'footer #f '(margin-tb) 'minimum-visual-profile
+             '((margin-tb-class . large)))
+            'extended))
+(check 'banner-justification-does-not-change-minimum
+       (and (not (ui-capability-profile
+                  'header #f '(justification) 'minimum-visual-profile
+                  '((justification . right))))
+            (not (ui-capability-profile
+                  'footer #f '(justification) 'minimum-visual-profile
+                  '((justification . right))))))
+
+;; Every TYPE registered before header/footer retains its profile API.
+(check 'all-existing-types-backward-compatible
+       (and (equal? (ui-profile 'rotary-slider 'compact)
+                    '((width . 5) (height . 5)))
+            (equal? (ui-profile 'linear-slider 'horizontal 'standard)
+                    '((width . 14) (height . 4)))
+            (equal? (ui-profile 'linear-slider 'vertical 'standard)
+                    '((width . 4) (height . 14)))
+            (equal? (ui-profile 'text-button 'standard)
+                    '((width . 8) (height . 3)))
+            (equal? (ui-profile 'toggle-button 'standard)
+                    '((width . 6) (height . 4)))
+            (equal? (ui-profile 'switch 'standard)
+                    '((width . 7) (height . 4)))
+            (equal? (ui-profile 'label 'standard)
+                    '((width . 12) (height . 3)))))
+
 ;; Recheck both pre-existing profile APIs after registering new TYPEs.
 (check 'rotary-backward-compatibility-after-extension
        (equal? (ui-profile 'rotary-slider 'compact)
