@@ -211,3 +211,90 @@
             (capabilities-all . (ticks tick-labels title value))
             (space . abundant)))
         (preferred-profile . extended))))))
+
+(register-ui-metrics!
+ 'text-button
+ '((technical-min
+    . ((normative? . #f)
+       (status . to-be-derived)
+       (width . #f)
+       (height . #f)))
+   (visual-min . ((width . 5) (height . 2)))
+   (preferred . ((width . 8) (height . 3)))
+   (useful-max . ((width . 12) (height . 4)))
+   (visual-min-profile . compact)
+   (preferred-profile . standard)
+   (useful-max-profile . extended)
+   (profiles
+    . ((compact . ((width . 5) (height . 2)))
+       (standard . ((width . 8) (height . 3)))
+       (extended . ((width . 12) (height . 4)))))
+   (aspect
+    . ((minimum . 2.5)
+       (preferred . 2.67)
+       (maximum . 3.0)))
+   (capabilities
+    . (text hover-feedback pressed-feedback))
+   (capability-rules
+    . (((when
+         . ((capabilities-all . (text))
+            (text-length-class . long)))
+        (preferred-aspect-ratio . 4.0))))))
+
+(register-ui-metrics!
+ 'toggle-button
+ '((technical-min
+    . ((normative? . #f)
+       (status . to-be-derived)
+       (width . #f)
+       (height . #f)))
+   (visual-min . ((width . 4) (height . 3)))
+   (preferred . ((width . 6) (height . 4)))
+   (useful-max . ((width . 8) (height . 5)))
+   (visual-min-profile . compact)
+   (preferred-profile . standard)
+   (useful-max-profile . extended)
+   (profiles
+    . ((compact . ((width . 4) (height . 3)))
+       (standard . ((width . 6) (height . 4)))
+       (extended . ((width . 8) (height . 5)))))
+   (aspect
+    . ((minimum . 1.33)
+       (preferred . 1.5)
+       (maximum . 1.6)))
+   (capabilities
+    . (text toggle-state hover-feedback pressed-or-toggle-feedback))
+   (capability-rules
+    . (((when
+         . ((capabilities-all . (text))
+            (text-length-class . long)))
+        (preferred-profile . extended))))))
+
+(register-ui-metrics!
+ 'switch
+ '((technical-min
+    . ((normative? . #f)
+       (status . to-be-derived)
+       (width . #f)
+       (height . #f)))
+   (visual-min . ((width . 5) (height . 3)))
+   (preferred . ((width . 7) (height . 4)))
+   (useful-max . ((width . 10) (height . 5)))
+   (visual-min-profile . compact)
+   (preferred-profile . standard)
+   (useful-max-profile . extended)
+   (profiles
+    . ((compact . ((width . 5) (height . 3)))
+       (standard . ((width . 7) (height . 4)))
+       (extended . ((width . 10) (height . 5)))))
+   (aspect
+    . ((minimum . 1.67)
+       (preferred . 1.75)
+       (maximum . 2.0)))
+   (capabilities
+    . (text toggle-state track thumb))
+   (capability-rules
+    . (((when
+         . ((capabilities-all . (text))
+            (text-length-class . long)))
+        (preferred-profile . extended))))))

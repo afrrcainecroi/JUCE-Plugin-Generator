@@ -142,4 +142,74 @@
          (equal? (ui-profile 'rotary-slider 'compact)
                  '((width . 5) (height . 5)))))
 
+(define (check-nonvariant-contract type compact standard extended aspect)
+  (let* ((metrics (ui-metrics type))
+         (technical-min (field metrics 'technical-min)))
+    (check (list type 'present) metrics)
+    (check (list type 'technical-min)
+           (and (not (field technical-min 'normative?))
+                (eq? (field technical-min 'status) 'to-be-derived)
+                (not (field technical-min 'width))
+                (not (field technical-min 'height))))
+    (check (list type 'profiles)
+           (and (equal? (ui-profile type 'compact) compact)
+                (equal? (ui-profile type 'standard) standard)
+                (equal? (ui-profile type 'extended) extended)))
+    (check (list type 'base-sizes)
+           (and (equal? (field metrics 'visual-min) compact)
+                (equal? (field metrics 'preferred) standard)
+                (equal? (field metrics 'useful-max) extended)
+                (eq? (field metrics 'visual-min-profile) 'compact)
+                (eq? (field metrics 'preferred-profile) 'standard)
+                (eq? (field metrics 'useful-max-profile) 'extended)))
+    (check (list type 'aspect)
+           (equal? (field metrics 'aspect) aspect))))
+
+(check-nonvariant-contract
+ 'text-button
+ '((width . 5) (height . 2))
+ '((width . 8) (height . 3))
+ '((width . 12) (height . 4))
+ '((minimum . 2.5) (preferred . 2.67) (maximum . 3.0)))
+
+(check-nonvariant-contract
+ 'toggle-button
+ '((width . 4) (height . 3))
+ '((width . 6) (height . 4))
+ '((width . 8) (height . 5))
+ '((minimum . 1.33) (preferred . 1.5) (maximum . 1.6)))
+
+(check-nonvariant-contract
+ 'switch
+ '((width . 5) (height . 3))
+ '((width . 7) (height . 4))
+ '((width . 10) (height . 5))
+ '((minimum . 1.67) (preferred . 1.75) (maximum . 2.0)))
+
+(check 'text-button-long-text-aspect
+       (= (ui-capability-profile
+           'text-button #f '(text) 'preferred-aspect-ratio
+           '((text-length-class . long)))
+          4.0))
+(check 'toggle-button-long-text-profile
+       (eq? (ui-capability-profile
+             'toggle-button #f '(text) 'preferred-profile
+             '((text-length-class . long)))
+            'extended))
+(check 'switch-long-text-profile
+       (eq? (ui-capability-profile
+             'switch #f '(text) 'preferred-profile
+             '((text-length-class . long)))
+            'extended))
+
+;; Recheck both pre-existing profile APIs after registering new TYPEs.
+(check 'rotary-backward-compatibility-after-extension
+       (equal? (ui-profile 'rotary-slider 'compact)
+               '((width . 5) (height . 5))))
+(check 'linear-backward-compatibility-after-extension
+       (and (equal? (ui-profile 'linear-slider 'horizontal 'standard)
+                    '((width . 14) (height . 4)))
+            (equal? (ui-profile 'linear-slider 'vertical 'standard)
+                    '((width . 4) (height . 14)))))
+
 (display "ui-metrics-test: PASS\n")
