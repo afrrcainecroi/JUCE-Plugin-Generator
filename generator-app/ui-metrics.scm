@@ -300,6 +300,43 @@
         (preferred-profile . extended))))))
 
 (register-ui-metrics!
+ 'bypass-switch
+ '((technical-min
+    . ((normative? . #f)
+       (status . to-be-derived)
+       (width . #f)
+       (height . #f)))
+   (visual-min . ((width . 5) (height . 3)))
+   (preferred . ((width . 7) (height . 4)))
+   (useful-max . ((width . 10) (height . 5)))
+   (visual-min-profile . compact)
+   (preferred-profile . standard)
+   (useful-max-profile . extended)
+   (profiles
+    . ((compact . ((width . 5) (height . 3)))
+       (standard . ((width . 7) (height . 4)))
+       (extended . ((width . 10) (height . 5)))))
+   (aspect
+    . ((minimum . 1.67)
+       (preferred . 1.75)
+       (maximum . 2.0)))
+   (natural-geometry
+    . ((form . switch)
+       (orientation . horizontal)))
+   (role-effect-on-footprint . none)
+   (capabilities
+    . (text toggle-state enabled track thumb disabled-feedback))
+   (content-dependent
+    . ((enabled . ((footprint-effect . none)))
+       (toggle-state . ((footprint-effect . none)))
+       (disabled-feedback . ((footprint-effect . none)))))
+   (capability-rules
+    . (((when
+         . ((capabilities-all . (text))
+            (text-length-class . long)))
+        (preferred-profile . extended))))))
+
+(register-ui-metrics!
  'label
  '((technical-min
     . ((normative? . #f)

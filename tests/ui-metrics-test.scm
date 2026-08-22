@@ -202,6 +202,71 @@
              '((text-length-class . long)))
             'extended))
 
+(check-nonvariant-contract
+ 'bypass-switch
+ '((width . 5) (height . 3))
+ '((width . 7) (height . 4))
+ '((width . 10) (height . 5))
+ '((minimum . 1.67) (preferred . 1.75) (maximum . 2.0)))
+
+(let* ((metrics (ui-metrics 'bypass-switch))
+       (technical-min (field metrics 'technical-min))
+       (natural-geometry (field metrics 'natural-geometry))
+       (capabilities (field metrics 'capabilities))
+       (content-dependent (field metrics 'content-dependent))
+       (rules (field metrics 'capability-rules)))
+  (check 'bypass-switch-technical-min-not-normative
+         (and (not (field technical-min 'normative?))
+              (eq? (field technical-min 'status) 'to-be-derived)
+              (not (field technical-min 'width))
+              (not (field technical-min 'height))))
+  (check 'bypass-switch-natural-geometry
+         (equal? natural-geometry
+                 '((form . switch) (orientation . horizontal))))
+  (check 'bypass-switch-capabilities
+         (equal? capabilities
+                 '(text toggle-state enabled track thumb disabled-feedback)))
+  (check 'bypass-switch-role-does-not-affect-footprint
+         (eq? (field metrics 'role-effect-on-footprint) 'none))
+  (check 'bypass-switch-state-does-not-affect-footprint
+         (every (lambda (capability)
+                  (eq? (field (field content-dependent capability)
+                              'footprint-effect)
+                       'none))
+                '(enabled toggle-state disabled-feedback)))
+  (check 'bypass-switch-state-does-not-change-profile
+         (every (lambda (capability)
+                  (and (not (ui-capability-profile
+                             'bypass-switch #f (list capability)
+                             'preferred-profile))
+                       (not (ui-capability-profile
+                             'bypass-switch #f (list capability)
+                             'minimum-visual-profile))))
+                '(enabled toggle-state disabled-feedback)))
+  (check 'bypass-switch-no-role-capability-rules
+         (every (lambda (rule)
+                  (let* ((condition (field rule 'when))
+                         (rule-capabilities
+                          (field condition 'capabilities-all)))
+                    (and (not (memq 'bypass rule-capabilities))
+                         (not (memq 'dsp-bypass rule-capabilities))
+                         (not (memq 'hard-bypass rule-capabilities)))))
+                rules)))
+
+(check 'bypass-switch-matches-switch-profiles
+       (every (lambda (profile)
+                (equal? (ui-profile 'bypass-switch profile)
+                        (ui-profile 'switch profile)))
+              '(compact standard extended)))
+
+(check 'bypass-switch-long-text-profile
+       (eq? (ui-capability-profile
+             'bypass-switch #f '(text) 'preferred-profile
+             '((text-length-class . long)))
+            (ui-capability-profile
+             'switch #f '(text) 'preferred-profile
+             '((text-length-class . long)))))
+
 (let* ((metrics (ui-metrics 'label))
        (technical-min (field metrics 'technical-min))
        (content-dependent (field metrics 'content-dependent)))
