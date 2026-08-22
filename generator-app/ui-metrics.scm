@@ -458,3 +458,51 @@
          . ((capabilities-all . (margin-tb))
             (margin-tb-class . large)))
         (minimum-visual-profile . extended))))))
+
+(register-ui-metrics!
+ 'link
+ '((technical-min
+    . ((normative? . #f)
+       (status . to-be-derived)
+       (width . #f)
+       (height . #f)))
+   (visual-min . ((width . 8) (height . 2)))
+   (preferred . ((width . 12) (height . 2)))
+   (useful-max . ((width . 16) (height . 2)))
+   (visual-min-profile . compact)
+   (preferred-profile . standard)
+   (useful-max-profile . extended)
+   (profiles
+    . ((compact . ((width . 8) (height . 2)))
+       (standard . ((width . 12) (height . 2)))
+       (extended . ((width . 16) (height . 2)))))
+   (natural-geometry
+    . ((form . interactive-horizontal-text)
+       (lines . single)))
+   (capabilities
+    . (text url font-size font-style justification
+            minimum-horizontal-scale interactive-hit-area
+            hover-feedback cursor-feedback))
+   (content-dependent
+    . ((text-length
+        . ((effect . preferred-profile)
+           (classification . descriptive-advisory)))
+       (font-size
+        . ((classification . descriptive-advisory)))
+       (minimum-horizontal-scale
+        . ((effect . fitted-text-compression)
+           (classification . renderer-configured)))
+       (font-style
+        . ((footprint-effect . not-significant-in-current-matrix)))
+       (justification
+        . ((footprint-effect . none)
+           (minimum-footprint-effect . none)))
+       (url
+        . ((footprint-effect . none)))))
+   ;; The current matrix supports no font-size profile rule or numeric
+   ;; threshold for long text.
+   (capability-rules
+    . (((when
+         . ((capabilities-all . (text))
+            (text-length-class . long)))
+        (preferred-profile . extended))))))

@@ -355,7 +355,84 @@
                   'footer #f '(justification) 'minimum-visual-profile
                   '((justification . right))))))
 
-;; Every TYPE registered before header/footer retains its profile API.
+(let* ((metrics (ui-metrics 'link))
+       (technical-min (field metrics 'technical-min))
+       (natural-geometry (field metrics 'natural-geometry))
+       (content-dependent (field metrics 'content-dependent)))
+  (check 'link-present metrics)
+  (check 'link-technical-min-not-normative
+         (and (not (field technical-min 'normative?))
+              (eq? (field technical-min 'status) 'to-be-derived)
+              (not (field technical-min 'width))
+              (not (field technical-min 'height))))
+  (check 'link-profiles
+         (and (equal? (ui-profile 'link 'compact)
+                      '((width . 8) (height . 2)))
+              (equal? (ui-profile 'link 'standard)
+                      '((width . 12) (height . 2)))
+              (equal? (ui-profile 'link 'extended)
+                      '((width . 16) (height . 2)))))
+  (check 'link-base-contract
+         (and (equal? (field metrics 'visual-min)
+                      '((width . 8) (height . 2)))
+              (equal? (field metrics 'preferred)
+                      '((width . 12) (height . 2)))
+              (equal? (field metrics 'useful-max)
+                      '((width . 16) (height . 2)))
+              (eq? (field metrics 'visual-min-profile) 'compact)
+              (eq? (field metrics 'preferred-profile) 'standard)
+              (eq? (field metrics 'useful-max-profile) 'extended)))
+  (check 'link-natural-geometry
+         (equal? natural-geometry
+                 '((form . interactive-horizontal-text)
+                   (lines . single))))
+  (check 'link-capabilities
+         (equal? (field metrics 'capabilities)
+                 '(text url font-size font-style justification
+                        minimum-horizontal-scale interactive-hit-area
+                        hover-feedback cursor-feedback)))
+  (check 'link-content-dependent-metadata
+         (and (equal? (field content-dependent 'text-length)
+                      '((effect . preferred-profile)
+                        (classification . descriptive-advisory)))
+              (equal? (field content-dependent 'font-size)
+                      '((classification . descriptive-advisory)))
+              (equal? (field content-dependent 'minimum-horizontal-scale)
+                      '((effect . fitted-text-compression)
+                        (classification . renderer-configured)))
+              (eq? (field (field content-dependent 'font-style)
+                          'footprint-effect)
+                   'not-significant-in-current-matrix)
+              (equal? (field content-dependent 'justification)
+                      '((footprint-effect . none)
+                        (minimum-footprint-effect . none)))
+              (eq? (field (field content-dependent 'url)
+                          'footprint-effect)
+                   'none)))
+  (check 'link-long-text-prefers-extended
+         (eq? (ui-capability-profile
+               'link #f '(text) 'preferred-profile
+               '((text-length-class . long)))
+              'extended))
+  (check 'link-url-does-not-change-footprint
+         (and (not (ui-capability-profile
+                    'link #f '(url) 'preferred-profile))
+              (not (ui-capability-profile
+                    'link #f '(url) 'minimum-visual-profile))))
+  (check 'link-justification-does-not-change-minimum
+         (not (ui-capability-profile
+               'link #f '(justification) 'minimum-visual-profile
+               '((justification . right)))))
+  (check 'link-font-style-does-not-change-profile
+         (not (ui-capability-profile
+               'link #f '(font-style) 'preferred-profile
+               '((font-style . bold)))))
+  (check 'link-large-font-has-no-profile-rule
+         (not (ui-capability-profile
+               'link #f '(font-size) 'preferred-profile
+               '((font-size-class . large))))))
+
+;; Every TYPE registered before link retains its profile API.
 (check 'all-existing-types-backward-compatible
        (and (equal? (ui-profile 'rotary-slider 'compact)
                     '((width . 5) (height . 5)))
@@ -370,7 +447,11 @@
             (equal? (ui-profile 'switch 'standard)
                     '((width . 7) (height . 4)))
             (equal? (ui-profile 'label 'standard)
-                    '((width . 12) (height . 3)))))
+                    '((width . 12) (height . 3)))
+            (equal? (ui-profile 'header 'standard)
+                    '((width . 24) (height . 3)))
+            (equal? (ui-profile 'footer 'standard)
+                    '((width . 24) (height . 3)))))
 
 ;; Recheck both pre-existing profile APIs after registering new TYPEs.
 (check 'rotary-backward-compatibility-after-extension

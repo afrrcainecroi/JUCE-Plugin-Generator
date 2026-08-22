@@ -10,9 +10,14 @@
 
 ;; Experimental horizontal footprints, aligned with the header/footer matrix.
 (define link-profiles
-  '(("COMPACT" "Compact" 3 16 2)
-    ("STANDARD" "Standard" 31 24 3)
-    ("EXTENDED" "Extended" 59 32 4)))
+  '(("COMPACT" "Compact" 3 8 2)
+    ("STANDARD" "Standard" 31 12 2)
+    ("EXTENDED" "Extended" 59 16 2)))
+
+(define large-font-height-profiles
+  '(("COMPACT" "Compact" 3 8 3)
+    ("STANDARD" "Standard" 31 12 3)
+    ("EXTENDED" "Extended" 59 16 3)))
 
 (define (profile-name profile) (list-ref profile 0))
 (define (profile-code profile) (list-ref profile 1))
@@ -61,7 +66,7 @@
     #:ratio 1.5
     #:width 1800)
   (make <grid>
-    #:rows 54
+    #:rows 60
     #:cols 90
     #:show-grid #t)
 
@@ -99,6 +104,14 @@
    "Link font sample" "https://example.com/test-b"
    '(#:font-size 24.0))
 
+  (for-each
+   (lambda (profile)
+     (make-link-caption "ILargeFont" "H LARGE FONT-SIZE" profile 49)
+     (make-link-specimen "ILargeFont" profile
+                         "Link font sample" "https://example.com/test-b"
+                         '(#:font-size 24.0) 49))
+   large-font-height-profiles)
+
   ;; Dedicated functional probes. footerLink intentionally exercises the
   ;; current stable template path; the second instance tests per-instance URL
   ;; propagation. Both identifiers are valid C++ identifiers.
@@ -108,7 +121,7 @@
     #:url "https://example.com/test-a"
     #:justification 'left
     #:font-size 14.0
-    #:row 49
+    #:row 55
     #:col 3
     #:row-span 3
     #:col-span 24
@@ -120,7 +133,7 @@
     #:url "https://example.com/test-b"
     #:justification 'right
     #:font-size 14.0
-    #:row 49
+    #:row 55
     #:col 59
     #:row-span 3
     #:col-span 24
