@@ -1,4 +1,5 @@
-(use-modules (generator-app topological-layout))
+(use-modules (srfi srfi-1)
+             (generator-app topological-layout))
 
 (define (check label predicate)
   (unless predicate
@@ -114,5 +115,145 @@
               (= (field node 'col) 1)
               (= (field node 'rowSpan) 10)
               (= (field node 'colSpan) 16))))
+
+;; Alignment declarations are global IR entries. The first id is the common
+;; reference; every remaining id is equated to it independently.
+(let ((resolved
+       (lt:solve
+        (list (lt:node 'a 'scope 'compact)
+              (lt:node 'b 'scope 'standard)
+              (lt:node 'c 'scope 'extended)
+              (lt:align-left 'a 'b 'c)))))
+  (check 'align-left-three
+         (and (= (field (resolved-node resolved 'a) 'col) 1)
+              (= (field (resolved-node resolved 'b) 'col) 1)
+              (= (field (resolved-node resolved 'c) 'col) 1))))
+
+(let ((resolved
+       (lt:solve
+        (list (lt:node 'a 'scope 'compact)
+              (lt:node 'b 'rotary-slider 'compact)
+              (lt:align-right 'a 'b)))))
+  (check 'align-right-different-widths
+         (and (= (field (resolved-node resolved 'a) 'col) 1)
+              (= (field (resolved-node resolved 'b) 'col) 4)
+              (= (+ (field (resolved-node resolved 'a) 'col) 8)
+                 (+ (field (resolved-node resolved 'b) 'col) 5)))))
+
+(let ((resolved
+       (lt:solve
+        (list (lt:node 'a 'scope 'compact)
+              (lt:node 'b 'toggle-button 'compact)
+              (lt:align-top 'a 'b)))))
+  (check 'align-top
+         (= (field (resolved-node resolved 'a) 'row)
+            (field (resolved-node resolved 'b) 'row))))
+
+(let ((resolved
+       (lt:solve
+        (list (lt:node 'a 'scope 'compact)
+              (lt:node 'b 'toggle-button 'compact)
+              (lt:align-bottom 'a 'b)))))
+  (check 'align-bottom-different-heights
+         (and (= (field (resolved-node resolved 'a) 'row) 1)
+              (= (field (resolved-node resolved 'b) 'row) 4)
+              (= (+ (field (resolved-node resolved 'a) 'row) 6)
+                 (+ (field (resolved-node resolved 'b) 'row) 3)))))
+
+(let ((resolved
+       (lt:solve
+        (list (lt:node 'a 'scope 'compact)
+              (lt:node 'b 'scope 'standard)
+              (lt:align-center-x 'a 'b)))))
+  (check 'align-center-x-integer
+         (and (= (field (resolved-node resolved 'a) 'col) 3)
+              (= (field (resolved-node resolved 'b) 'col) 1)
+              (= (+ (field (resolved-node resolved 'a) 'col) 4)
+                 (+ (field (resolved-node resolved 'b) 'col) 6)))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'rotary-slider 'compact)
+               (lt:node 'b 'scope 'compact)
+               (lt:align-center-x 'a 'b))))
+       (a-col (field (resolved-node resolved 'a) 'col))
+       (b-col (field (resolved-node resolved 'b) 'col)))
+  (check 'align-center-x-half
+         (and (= a-col 5/2)
+              (= b-col 1)
+              (exact? a-col)
+              (= (denominator a-col) 2)
+              (= (+ a-col 5/2) (+ b-col 4)))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'toggle-button 'compact)
+               (lt:node 'b 'scope 'compact)
+               (lt:align-center-y 'a 'b))))
+       (a-row (field (resolved-node resolved 'a) 'row))
+       (b-row (field (resolved-node resolved 'b) 'row)))
+  (check 'align-center-y-half
+         (and (= a-row 5/2)
+              (= b-row 1)
+              (exact? a-row)
+              (= (denominator a-row) 2)
+              (= (+ a-row 3/2) (+ b-row 3)))))
+
+;; The alignment may precede every referenced node in the input.
+(let ((resolved
+       (lt:solve
+        (list (lt:align-left 'a 'b 'c)
+              (lt:node 'c 'scope 'extended)
+              (lt:node 'b 'scope 'standard)
+              (lt:node 'a 'scope 'compact)))))
+  (check 'alignment-forward-references
+         (every (lambda (id) (= (field (resolved-node resolved id) 'col) 1))
+                '(a b c))))
+
+(let ((resolved
+       (lt:solve
+        (list (lt:node 'a 'scope 'compact)
+              (lt:node 'b 'scope 'compact
+                       #:constraints (list (lt:next-right-of 'a)))
+              (lt:align-top 'a 'b)))))
+  (check 'alignment-with-compatible-next
+         (and (= (field (resolved-node resolved 'a) 'row)
+                 (field (resolved-node resolved 'b) 'row))
+              (= (field (resolved-node resolved 'b) 'col) 9))))
+
+(check 'alignment-with-incompatible-anchors
+       (rejected?
+        (lambda ()
+          (lt:solve
+           (list (lt:node 'a 'scope 'compact #:col 1)
+                 (lt:node 'b 'scope 'compact #:col 2)
+                 (lt:align-left 'a 'b))))))
+
+(check 'alignment-missing-reference
+       (rejected?
+        (lambda ()
+          (lt:solve
+           (list (lt:node 'a 'scope 'compact)
+                 (lt:align-right 'a 'missing))))))
+
+(check 'single-node-alignment
+       (rejected? (lambda () (lt:align-center-x 'a))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'rotary-slider 'compact)
+               (lt:node 'b 'scope 'compact)
+               (lt:align-center-x 'a 'b))))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b)))
+  (check 'exact-coordinates-and-integer-spans
+         (and (exact? (field a 'row))
+              (exact? (field a 'col))
+              (exact? (field b 'row))
+              (exact? (field b 'col))
+              (integer? (field a 'rowSpan))
+              (integer? (field a 'colSpan))
+              (integer? (field b 'rowSpan))
+              (integer? (field b 'colSpan)))))
 
 (display "topological-layout-test: PASS\n")

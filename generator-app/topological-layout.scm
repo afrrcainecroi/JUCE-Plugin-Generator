@@ -11,6 +11,12 @@
             lt:left-of
             lt:above
             lt:below
+            lt:align-left
+            lt:align-right
+            lt:align-top
+            lt:align-bottom
+            lt:align-center-x
+            lt:align-center-y
             lt:solve))
 
 ;; Experimental logical layout IR. It is intentionally independent from the
@@ -26,7 +32,8 @@
   (unless (and (or (not row) (integer? row))
                (or (not col) (integer? col)))
     (error "Topological layout anchors must be integers" id row col))
-  `((id . ,id)
+  `((kind . node)
+    (id . ,id)
     (type . ,type)
     (profile . ,profile)
     (row . ,row)
@@ -55,6 +62,26 @@
   (make-constraint 'above reference))
 (define (lt:below reference)
   (make-constraint 'below reference))
+
+(define (make-alignment relation ids)
+  (unless (>= (length ids) 2)
+    (error "Hard alignment requires at least two node ids" relation ids))
+  (unless (every symbol? ids)
+    (error "Hard alignment node ids must be symbols" relation ids))
+  `((kind . alignment) (relation . ,relation) (nodes . ,ids)))
+
+(define (lt:align-left . ids)
+  (make-alignment 'align-left ids))
+(define (lt:align-right . ids)
+  (make-alignment 'align-right ids))
+(define (lt:align-top . ids)
+  (make-alignment 'align-top ids))
+(define (lt:align-bottom . ids)
+  (make-alignment 'align-bottom ids))
+(define (lt:align-center-x . ids)
+  (make-alignment 'align-center-x ids))
+(define (lt:align-center-y . ids)
+  (make-alignment 'align-center-y ids))
 
 (define (field alist key)
   (let ((entry (assoc key alist)))
@@ -120,7 +147,46 @@
       (else
        (error "Unknown hard positional constraint" id relation)))))
 
-(define (build-axis-edges nodes sizes axis origin)
+(define (alignment-offset relation size)
+  (case relation
+    ((align-left align-top) 0)
+    ((align-right) (car size))
+    ((align-bottom) (cdr size))
+    ((align-center-x) (/ (car size) 2))
+    ((align-center-y) (/ (cdr size) 2))
+    (else (error "Unknown hard alignment constraint" relation))))
+
+(define (alignment-axis relation)
+  (case relation
+    ((align-left align-right align-center-x) 'horizontal)
+    ((align-top align-bottom align-center-y) 'vertical)
+    (else (error "Unknown hard alignment constraint" relation))))
+
+(define (alignment-edges alignment nodes sizes axis)
+  (let* ((relation (field alignment 'relation))
+         (ids (field alignment 'nodes)))
+    (if (not (eq? (alignment-axis relation) axis))
+        '()
+        (let* ((reference-id (car ids))
+               (reference (node-by-id nodes reference-id)))
+          (unless reference
+            (error "Missing hard alignment reference" relation reference-id))
+          (let ((reference-offset
+                 (alignment-offset relation
+                                   (assoc-ref sizes reference-id))))
+            (append-map
+             (lambda (id)
+               (unless (node-by-id nodes id)
+                 (error "Missing hard alignment reference" relation id))
+               (let ((delta
+                      (- reference-offset
+                         (alignment-offset relation (assoc-ref sizes id)))))
+                 ;; position(id) = position(reference) + delta
+                 (list (edge reference-id id delta)
+                       (edge id reference-id (- delta)))))
+             (cdr ids)))))))
+
+(define (build-axis-edges nodes alignments sizes axis origin)
   (append
    ;; Logical coordinates are one-based. This also chooses the deterministic
    ;; earliest solution when inequalities leave free space.
@@ -147,12 +213,16 @@
                     (field node 'id) reference-id))
            (or (constraint-edges node reference relation sizes axis) '())))
        (field node 'constraints)))
-    nodes)))
+    nodes)
+   (append-map
+    (lambda (alignment)
+      (alignment-edges alignment nodes sizes axis))
+    alignments)))
 
-(define (solve-axis nodes sizes axis)
+(define (solve-axis nodes alignments sizes axis)
   (let* ((origin (gensym "layout-origin-"))
          (vertices (cons origin (map (lambda (node) (field node 'id)) nodes)))
-         (edges (build-axis-edges nodes sizes axis origin))
+         (edges (build-axis-edges nodes alignments sizes axis origin))
          (distances (make-hash-table)))
     (for-each (lambda (vertex) (hashq-set! distances vertex 0)) vertices)
     (let loop ((pass 0))
@@ -178,15 +248,24 @@
     (unless (= (length ids) (length (delete-duplicates ids eq?)))
       (error "Duplicate topological layout node id" ids))))
 
-(define (lt:solve nodes)
-  (unless (list? nodes)
-    (error "Topological layout input must be a list" nodes))
+(define (lt:solve entries)
+  (unless (list? entries)
+    (error "Topological layout input must be a list" entries))
+  (unless (every (lambda (entry)
+                   (memq (field entry 'kind) '(node alignment)))
+                 entries)
+    (error "Invalid topological layout IR entry" entries))
+  (let ((nodes (filter (lambda (entry) (eq? (field entry 'kind) 'node))
+                       entries))
+        (alignments
+         (filter (lambda (entry) (eq? (field entry 'kind) 'alignment))
+                 entries)))
   (validate-node-ids! nodes)
   (let* ((sizes (map (lambda (node)
                        (cons (field node 'id) (node-size node)))
                      nodes))
-         (columns (solve-axis nodes sizes 'horizontal))
-         (rows (solve-axis nodes sizes 'vertical)))
+         (columns (solve-axis nodes alignments sizes 'horizontal))
+         (rows (solve-axis nodes alignments sizes 'vertical)))
     (map
      (lambda (node)
        (let* ((id (field node 'id))
@@ -198,4 +277,4 @@
            (col . ,(hashq-ref columns id))
            (rowSpan . ,(cdr size))
            (colSpan . ,(car size)))))
-     nodes)))
+     nodes))))
