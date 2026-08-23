@@ -174,4 +174,9 @@
   #t)
 
 (define-method (validate-component! (s <scope>))
+  (unless (memq (scope:grid-style s)
+                '(radar minimal))
+    (error "Invalid scope grid-style; expected one of (radar minimal)"
+           (component:id s)
+           (scope:grid-style s)))
   #t)

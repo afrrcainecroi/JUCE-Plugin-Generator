@@ -118,7 +118,7 @@
 (new-class <scope> (<component>)
 	   (
 	    ;; proprietà grafiche del KineticScope
-	    (grid-style 'default)
+	    (grid-style 'radar)
 	    (is-sharp #f)
 	    (glow-multiplier 1.0))
 	   #:code
