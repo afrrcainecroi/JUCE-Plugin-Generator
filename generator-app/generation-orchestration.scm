@@ -2,6 +2,7 @@
   #:use-module (srfi srfi-1)
   #:use-module (generator-app generation-state)
   #:use-module (generator-app cpp-generation)
+  #:use-module (generator-app layout)
   #:use-module (generator-app topological-normalizer)
   #:export (generate-member-declarations
             generate-constructor-code
@@ -14,7 +15,10 @@
             generate-destroy-code
             compare-legacy-topological-layout
             build-topological-shadow
-            run-generation-topological-shadow))
+            run-generation-topological-shadow
+            refine-topological-grid
+            prepare-generation-layout
+            generate-selected-grid-code))
 
 (define (field alist key)
   (let ((entry (assoc key alist)))
@@ -91,6 +95,127 @@
    (reverse (generation-components))
    (generation-grid)
    topology-declarations))
+
+(define (replace-field alist key value)
+  (map (lambda (entry)
+         (if (eq? (car entry) key) (cons key value) entry))
+       alist))
+
+(define (replace-layout-fields entry row col row-span col-span)
+  (replace-field
+   (replace-field
+    (replace-field
+     (replace-field entry 'row row)
+     'col col)
+    'rowSpan row-span)
+   'colSpan col-span))
+
+(define (resolved-node? entry)
+  (and (field entry 'type)
+       (field entry 'row)
+       (field entry 'col)))
+
+(define (axis-refinement-factor nodes key)
+  (fold (lambda (node factor)
+          (let ((coordinate (field node key)))
+            (unless (and (number? coordinate) (exact? coordinate))
+              (error "Topological grid refinement requires exact coordinates"
+                     key coordinate))
+            (lcm factor (denominator coordinate))))
+        1
+        nodes))
+
+(define (refine-coordinate coordinate factor)
+  (+ 1 (* factor (- coordinate 1))))
+
+(define (refine-span span factor)
+  (* factor span))
+
+(define (refine-entry entry dx dy)
+  (if (and (field entry 'row) (field entry 'col)
+           (field entry 'rowSpan) (field entry 'colSpan))
+      (let ((row (refine-coordinate (field entry 'row) dy))
+            (col (refine-coordinate (field entry 'col) dx))
+            (row-span (refine-span (field entry 'rowSpan) dy))
+            (col-span (refine-span (field entry 'colSpan) dx)))
+        (unless (and (exact-integer? row) (exact-integer? col)
+                     (exact-integer? row-span) (exact-integer? col-span))
+          (error "Exact topological grid refinement did not produce integers"
+                 (field entry 'id) row col row-span col-span))
+        (replace-layout-fields entry row col row-span col-span))
+      entry))
+
+(define (discrete-layout-components models discrete-resolved)
+  (map
+   (lambda (model)
+     (let* ((id-value (field model 'id))
+            (id (if (string? id-value) (string->symbol id-value) id-value))
+            (node (resolved-node-by-id discrete-resolved id)))
+       (unless node
+         (error "Discrete topological IR is missing a DSL component" id))
+       `((var . ,(field model 'var))
+         (row . ,(field node 'row))
+         (col . ,(field node 'col))
+         (rowSpan . ,(field node 'rowSpan))
+         (colSpan . ,(field node 'colSpan))
+         (margin-tb . ,(field model 'margin-tb))
+         (margin-lr . ,(field model 'margin-lr)))))
+   models))
+
+(define (refine-topological-grid shadow models grid-model)
+  (let* ((resolved (field shadow 'resolved))
+         (nodes (filter resolved-node? resolved))
+         (dx (axis-refinement-factor nodes 'col))
+         (dy (axis-refinement-factor nodes 'row))
+         (discrete-resolved
+          (map (lambda (entry) (refine-entry entry dx dy)) resolved))
+         (screen-cols (* dx (field (field shadow 'normalized) 'screen-cols)))
+         (screen-rows (* dy (field (field shadow 'normalized) 'screen-rows)))
+         (discrete-grid
+          `((rows . ,screen-rows)
+            (cols . ,screen-cols)
+            (show-grid . ,(field grid-model 'show-grid))))
+         (layout-components
+          (discrete-layout-components models discrete-resolved)))
+    `((dx . ,dx)
+      (dy . ,dy)
+      (screen-rows . ,screen-rows)
+      (screen-cols . ,screen-cols)
+      (original-resolved . ,resolved)
+      (discrete-resolved . ,discrete-resolved)
+      (grid-model . ,discrete-grid)
+      (layout-components . ,layout-components))))
+
+(define* (prepare-generation-layout
+          #:key
+          (layout-mode 'legacy)
+          (topology-declarations '()))
+  (unless (memq layout-mode '(legacy topological))
+    (error "Unknown generator layout mode" layout-mode))
+  (let* ((models (reverse (generation-components)))
+         (grid-model (generation-grid))
+         (shadow (build-topological-shadow
+                  models grid-model topology-declarations)))
+    (if (eq? layout-mode 'legacy)
+        `((mode . legacy) (shadow . ,shadow) (refinement . #f))
+        `((mode . topological)
+          (shadow . ,shadow)
+          (refinement . ,(refine-topological-grid
+                           shadow models grid-model))))))
+
+(define* (generate-selected-grid-code
+          #:key
+          (layout-mode 'legacy)
+          (topology-declarations '()))
+  (if (eq? layout-mode 'legacy)
+      (generate-grid-code)
+      (let* ((plan (prepare-generation-layout
+                    #:layout-mode layout-mode
+                    #:topology-declarations topology-declarations))
+             (refinement (field plan 'refinement)))
+        (generate-grid-code
+         #:grid-model (field refinement 'grid-model)
+         #:layout-components (field refinement 'layout-components)))))
 
 (define (generate-member-declarations)
   (apply string-append

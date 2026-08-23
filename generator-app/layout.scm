@@ -75,13 +75,16 @@ standardScreenHeight = standardScreenWidth / screenRatio;
   (map component-model->layout-model
        (reverse (generation-components))))
 
-(define (generate-grid-code)
-  (unless (generation-grid)
+(define* (generate-grid-code #:key
+                             (grid-model (generation-grid))
+                             (layout-components #f))
+  (unless grid-model
     (error "<grid> has to be defined"))
-  (let* ((rows (assoc-ref (generation-grid) 'rows))
-         (cols (assoc-ref (generation-grid) 'cols))
-         (show-grid (assoc-ref (generation-grid) 'show-grid))
-         (layout-components (generate-layout-data-components))
+  (let* ((rows (assoc-ref grid-model 'rows))
+         (cols (assoc-ref grid-model 'cols))
+         (show-grid (assoc-ref grid-model 'show-grid))
+         (layout-components (or layout-components
+                                (generate-layout-data-components)))
          (grid-data `(("rows" . ,rows) ("cols" . ,cols)))
          (grid-json (json-prepend-key "grid" grid-data))
          (components-json

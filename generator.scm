@@ -99,7 +99,9 @@
 ;;Per generare i codici C++
 (define-public oversampling-filters '(filterHalfBandPolyphaseIIR filterHalfBandFIREquiripple))
 (define* (GenerateC++ g::gen-var dst-folder new-name interface-definitions aggiornamento
-                      #:key (topology-declarations '()))
+                      #:key
+                      (layout-mode 'legacy)
+                      (topology-declarations '()))
   ;;Inizializza i risultati
   (InitializeConstants)
     ;; Nuovo sistema identificatori DSL -> C++
@@ -112,9 +114,13 @@
   ;; (set! *OVERSAMPLING-useIntegerLatency* #t)
   (interface-definitions dst-folder new-name)
 
-  ;; Shadow-only logical layout: deliberately discard the diagnostic result.
-  ;; Tests and tooling can call run-generation-topological-shadow directly.
-  (run-generation-topological-shadow topology-declarations)
+  (unless (memq layout-mode '(legacy topological))
+    (error "Unknown generator layout mode" layout-mode))
+
+  ;; Legacy keeps the diagnostic shadow branch.  Topological mode performs the
+  ;; same normalization/solve once, at the layout-emission convergence point.
+  (when (eq? layout-mode 'legacy)
+    (run-generation-topological-shadow topology-declarations))
 
   ;; Materializza le RESOURCE dichiarate dalla DSL.
   (materialize-image-sets! dst-folder)
@@ -283,7 +289,11 @@
     (when (not (generation-grid))
       (Show! "<grid> has to be defined!!")
       (exit EXIT_FAILURE))
-    (replace-between-flags PluginEditor.cpp *GRID::START* *GRID::END* (generate-grid-code))
+    (replace-between-flags
+     PluginEditor.cpp *GRID::START* *GRID::END*
+     (generate-selected-grid-code
+      #:layout-mode layout-mode
+      #:topology-declarations topology-declarations))
     ;;
     ;;La gestione del fft o no fft (real plugin!)
     )
