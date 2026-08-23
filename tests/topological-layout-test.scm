@@ -15,10 +15,18 @@
           ((eq? (field (car nodes) 'id) id) (car nodes))
           (else (loop (cdr nodes))))))
 
+(define (resolved-kind resolved kind)
+  (find (lambda (entry) (eq? (field entry 'kind) kind)) resolved))
+
 (define (rejected? thunk)
   (catch #t
     (lambda () (thunk) #f)
     (lambda args #t)))
+
+(define (soft-cost=? entry order-violations positive-gap)
+  (let ((cost (field entry 'soft-cost)))
+    (and (= (field cost 'order-violations) order-violations)
+         (= (field cost 'positive-gap) positive-gap))))
 
 ;; compact scope is 8x6, so adjacency produces columns 1, 9 and 17.
 (let* ((resolved
@@ -351,5 +359,415 @@
               (integer? (field analog 'colSpan))
               (integer? (field horizontal 'rowSpan))
               (integer? (field horizontal 'colSpan)))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'scope 'compact)
+               (lt:node 'c 'scope 'compact)
+               (lt:group 'horizontal-group #:layout 'horizontal 'a 'b 'c))))
+       (group (resolved-node resolved 'horizontal-group)))
+  (check 'horizontal-group-three
+         (and (= (field (resolved-node resolved 'a) 'col) 1)
+              (= (field (resolved-node resolved 'b) 'col) 9)
+              (= (field (resolved-node resolved 'c) 'col) 17)))
+  (check 'horizontal-group-bounds
+         (and (eq? (field group 'kind) 'group)
+              (equal? (field group 'members) '(a b c))
+              (= (field group 'row) 1)
+              (= (field group 'col) 1)
+              (= (field group 'rowSpan) 6)
+              (= (field group 'colSpan) 24))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'scope 'compact)
+               (lt:node 'c 'scope 'compact)
+               (lt:group 'vertical-group #:layout 'vertical 'a 'b 'c))))
+       (group (resolved-node resolved 'vertical-group)))
+  (check 'vertical-group-three
+         (and (= (field (resolved-node resolved 'a) 'row) 1)
+              (= (field (resolved-node resolved 'b) 'row) 7)
+              (= (field (resolved-node resolved 'c) 'row) 13)))
+  (check 'vertical-group-bounds
+         (and (equal? (field group 'members) '(a b c))
+              (= (field group 'row) 1)
+              (= (field group 'col) 1)
+              (= (field group 'rowSpan) 18)
+              (= (field group 'colSpan) 8))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'scope 'scope 'compact)
+               (lt:node 'rotary 'rotary-slider 'compact)
+               (lt:node 'wide 'scope 'standard)
+               (lt:group 'mixed-sizes #:layout 'horizontal
+                         'scope 'rotary 'wide))))
+       (group (resolved-node resolved 'mixed-sizes)))
+  (check 'group-different-member-sizes
+         (and (= (field (resolved-node resolved 'scope) 'col) 1)
+              (= (field (resolved-node resolved 'rotary) 'col) 9)
+              (= (field (resolved-node resolved 'wide) 'col) 14)
+              (= (field group 'rowSpan) 8)
+              (= (field group 'colSpan) 25))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'scope 'scope 'standard)
+               (lt:node 'analog 'meter 'standard #:variant 'analog)
+               (lt:node 'segments 'meter 'compact
+                        #:variant 'segmented-horizontal)
+               (lt:group 'variant-members #:layout 'horizontal
+                         'scope 'analog 'segments))))
+       (group (resolved-node resolved 'variant-members)))
+  (check 'group-variant-aware-members
+         (and (= (field (resolved-node resolved 'scope) 'col) 1)
+              (= (field (resolved-node resolved 'analog) 'col) 13)
+              (= (field (resolved-node resolved 'segments) 'col) 22)
+              (= (field group 'colSpan) 31)
+              (= (field group 'rowSpan) 8))))
+
+(let ((resolved
+       (lt:solve
+        (list (lt:group 'forward-group #:layout 'horizontal 'a 'b 'c)
+              (lt:node 'c 'scope 'extended)
+              (lt:node 'b 'scope 'standard)
+              (lt:node 'a 'scope 'compact)))))
+  (check 'group-forward-reference
+         (and (= (field (resolved-node resolved 'a) 'col) 1)
+              (= (field (resolved-node resolved 'b) 'col) 9)
+              (= (field (resolved-node resolved 'c) 'col) 21)
+              (equal? (field (resolved-node resolved 'forward-group) 'members)
+                      '(a b c)))))
+
+(check 'group-missing-member
+       (rejected?
+        (lambda ()
+          (lt:solve
+           (list (lt:group 'g #:layout 'horizontal 'a 'missing)
+                 (lt:node 'a 'scope 'compact))))))
+
+(check 'group-duplicate-member
+       (rejected?
+        (lambda ()
+          (lt:group 'g #:layout 'horizontal 'a 'a))))
+
+(check 'group-single-member
+       (rejected?
+        (lambda ()
+          (lt:group 'g #:layout 'vertical 'a))))
+
+(check 'group-invalid-layout
+       (rejected?
+        (lambda ()
+          (lt:group 'g #:layout 'radial 'a 'b))))
+
+(check 'duplicate-group-id
+       (rejected?
+        (lambda ()
+          (lt:solve
+           (list (lt:node 'a 'scope 'compact)
+                 (lt:node 'b 'scope 'compact)
+                 (lt:group 'g #:layout 'horizontal 'a 'b)
+                 (lt:group 'g #:layout 'vertical 'a 'b))))))
+
+(check 'group-id-node-id-collision
+       (rejected?
+        (lambda ()
+          (lt:solve
+           (list (lt:node 'g 'scope 'compact)
+                 (lt:node 'b 'scope 'compact)
+                 (lt:group 'g #:layout 'horizontal 'g 'b))))))
+
+(let ((resolved
+       (lt:solve
+        (list (lt:node 'a 'scope 'compact)
+              (lt:node 'b 'rotary-slider 'compact)
+              (lt:node 'c 'scope 'standard)
+              (lt:group 'aligned-group #:layout 'horizontal 'a 'b 'c)
+              (lt:align-top 'a 'b 'c)))))
+  (check 'horizontal-group-compatible-alignment
+         (and (= (field (resolved-node resolved 'a) 'row) 1)
+              (= (field (resolved-node resolved 'b) 'row) 1)
+              (= (field (resolved-node resolved 'c) 'row) 1)
+              (= (field (resolved-node resolved 'b) 'col) 9)
+              (= (field (resolved-node resolved 'c) 'col) 14))))
+
+(check 'group-incompatible-positional-constraint
+       (rejected?
+        (lambda ()
+          (lt:solve
+           (list (lt:node 'a 'scope 'compact)
+                 (lt:node 'b 'scope 'compact
+                          #:constraints (list (lt:next-left-of 'a)))
+                 (lt:group 'g #:layout 'horizontal 'a 'b))))))
+
+(check 'vertical-group-incompatible-anchors
+       (rejected?
+        (lambda ()
+          (lt:solve
+           (list (lt:node 'a 'scope 'compact #:row 1)
+                 (lt:node 'b 'scope 'compact #:row 10)
+                 (lt:group 'g #:layout 'vertical 'a 'b))))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'scope 'scope 'compact)
+               (lt:node 'analog 'meter 'standard #:variant 'analog)
+               (lt:group 'vertical-mixed #:layout 'vertical
+                         'scope 'analog))))
+       (group (resolved-node resolved 'vertical-mixed)))
+  (check 'vertical-mixed-group-bounding-box
+         (and (= (field (resolved-node resolved 'analog) 'row) 7)
+              (= (field group 'row) 1)
+              (= (field group 'col) 1)
+              (= (field group 'rowSpan) 13)
+              (= (field group 'colSpan) 9))))
+
+;; Omitting cohesion preserves the original hard adjacency contract.
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'scope 'compact)
+               (lt:group 'hard-default #:layout 'horizontal 'a 'b))))
+       (group (resolved-node resolved 'hard-default)))
+  (check 'group-without-cohesion-remains-hard
+         (and (= (field (resolved-node resolved 'a) 'col) 1)
+              (= (field (resolved-node resolved 'b) 'col) 9)
+              (not (field group 'cohesion))
+              (not (field group 'cohesion-weight))
+              (soft-cost=? group 0 0)
+              (not (resolved-kind resolved 'solver-metadata)))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'scope 'compact)
+               (lt:node 'c 'scope 'compact)
+               (lt:group 'soft-horizontal #:layout 'horizontal
+                         #:cohesion 'strong 'a 'b 'c))))
+       (group (resolved-node resolved 'soft-horizontal))
+       (metadata (resolved-kind resolved 'solver-metadata)))
+  (check 'soft-strong-horizontal-zero-gaps
+         (and (= (field (resolved-node resolved 'a) 'col) 1)
+              (= (field (resolved-node resolved 'b) 'col) 9)
+              (= (field (resolved-node resolved 'c) 'col) 17)
+              (eq? (field group 'cohesion) 'strong)
+              (soft-cost=? group 0 0)
+              (soft-cost=? metadata 0 0))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'scope 'compact)
+               (lt:node 'c 'scope 'compact)
+               (lt:group 'soft-vertical #:layout 'vertical
+                         #:cohesion 'medium 'a 'b 'c))))
+       (group (resolved-node resolved 'soft-vertical)))
+  (check 'soft-vertical-zero-gaps
+         (and (= (field (resolved-node resolved 'a) 'row) 1)
+              (= (field (resolved-node resolved 'b) 'row) 7)
+              (= (field (resolved-node resolved 'c) 'row) 13)
+              (soft-cost=? group 0 0))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact #:col 1)
+               (lt:node 'b 'scope 'compact #:col 20)
+               (lt:group 'forced-gap #:layout 'horizontal
+                         #:cohesion 'strong 'a 'b))))
+       (group (resolved-node resolved 'forced-gap)))
+  (check 'hard-anchor-forces-soft-gap
+         (and (= (field (resolved-node resolved 'a) 'col) 1)
+              (= (field (resolved-node resolved 'b) 'col) 20)
+              (soft-cost=? group 0 33)
+              (soft-cost=? (resolved-kind resolved 'solver-metadata)
+                           0 33))))
+
+(let ((resolved
+       (lt:solve
+        (list (lt:node 'a 'scope 'compact #:col 1)
+              (lt:node 'b 'scope 'compact
+                       #:constraints (list (lt:right-of 'a)))
+              (lt:group 'right-of-cohesion #:layout 'horizontal
+                        #:cohesion 'weak 'a 'b)))))
+  (check 'right-of-with-cohesion-minimizes-distance
+         (and (= (field (resolved-node resolved 'b) 'col) 9)
+              (soft-cost=? (resolved-node resolved 'right-of-cohesion)
+                           0 0))))
+
+;; With no hard relation, both overlapping and adjacent placements are hard
+;; valid. Cohesion selects the adjacent zero-gap configuration.
+(let* ((hard-only
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'scope 'compact))))
+       (soft
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'scope 'compact)
+               (lt:group 'choice #:layout 'horizontal
+                         #:cohesion 'medium 'a 'b)))))
+  (check 'soft-selects-lower-cost-hard-solution
+         (and (= (field (resolved-node hard-only 'b) 'col) 1)
+              (= (field (resolved-node soft 'b) 'col) 9)
+              (soft-cost=? (resolved-node soft 'choice) 0 0))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'scope 'compact)
+               (lt:group 'strong-group #:layout 'horizontal
+                         #:cohesion 'strong 'a 'b)
+               (lt:group 'medium-group #:layout 'horizontal
+                         #:cohesion 'medium 'a 'b)
+               (lt:group 'weak-group #:layout 'horizontal
+                         #:cohesion 'weak 'a 'b))))
+       (strong (resolved-node resolved 'strong-group))
+       (medium (resolved-node resolved 'medium-group))
+       (weak (resolved-node resolved 'weak-group)))
+  (check 'cohesion-weight-order
+         (and (= (field strong 'cohesion-weight) 3)
+              (= (field medium 'cohesion-weight) 2)
+              (= (field weak 'cohesion-weight) 1)
+              (> (field strong 'cohesion-weight)
+                 (field medium 'cohesion-weight))
+              (> (field medium 'cohesion-weight)
+                 (field weak 'cohesion-weight)))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact #:col 1)
+               (lt:node 'b 'scope 'compact #:col 20)
+               (lt:node 'c 'scope 'compact #:col 40)
+               (lt:group 'shared-strong #:layout 'horizontal
+                         #:cohesion 'strong 'a 'b)
+               (lt:group 'shared-medium #:layout 'horizontal
+                         #:cohesion 'medium 'b 'c))))
+       (strong (resolved-node resolved 'shared-strong))
+       (medium (resolved-node resolved 'shared-medium))
+       (metadata (resolved-kind resolved 'solver-metadata)))
+  (check 'overlapping-soft-groups-summed-cost
+         (and (soft-cost=? strong 0 33)
+              (soft-cost=? medium 0 24)
+              (soft-cost=? metadata 0 57))))
+
+;; Coincident anchors make B overlap A. The old max(0, gap) objective
+;; incorrectly reported this as the same zero cost as exact adjacency.
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact #:col 1)
+               (lt:node 'b 'scope 'compact #:col 1)
+               (lt:group 'overlap #:layout 'horizontal
+                         #:cohesion 'strong 'a 'b))))
+       (group (resolved-node resolved 'overlap))
+       (metadata (resolved-kind resolved 'solver-metadata)))
+  (check 'overlap-has-order-violation-cost
+         (and (= (field (resolved-node resolved 'a) 'col) 1)
+              (= (field (resolved-node resolved 'b) 'col) 1)
+              (soft-cost=? group 3 0)
+              (soft-cost=? metadata 3 0))))
+
+;; A hard inversion remains authoritative and is diagnosed, not rejected.
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact #:col 20)
+               (lt:node 'b 'scope 'compact #:col 1)
+               (lt:group 'forced-inversion #:layout 'horizontal
+                         #:cohesion 'medium 'a 'b))))
+       (group (resolved-node resolved 'forced-inversion)))
+  (check 'hard-anchor-forced-inversion-is-preserved
+         (and (= (field (resolved-node resolved 'a) 'col) 20)
+              (= (field (resolved-node resolved 'b) 'col) 1)
+              (soft-cost=? group 2 0))))
+
+;; Put the weaker reverse wish first: with the old scalar objective both
+;; directions cost zero and its edge-count tie-break retained the weak wish.
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'scope 'compact)
+               (lt:group 'weak-reverse #:layout 'horizontal
+                         #:cohesion 'weak 'b 'a)
+               (lt:group 'strong-forward #:layout 'horizontal
+                         #:cohesion 'strong 'a 'b))))
+       (weak (resolved-node resolved 'weak-reverse))
+       (strong (resolved-node resolved 'strong-forward))
+       (metadata (resolved-kind resolved 'solver-metadata)))
+  (check 'strong-order-wins-over-weak-order
+         (and (= (field (resolved-node resolved 'a) 'col) 1)
+              (= (field (resolved-node resolved 'b) 'col) 9)
+              (soft-cost=? strong 0 0)
+              (soft-cost=? weak 1 0)
+              (soft-cost=? metadata 1 0))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'scope 'compact)
+               (lt:group 'medium-reverse #:layout 'horizontal
+                         #:cohesion 'medium 'b 'a)
+               (lt:group 'strong-forward #:layout 'horizontal
+                         #:cohesion 'strong 'a 'b))))
+       (medium (resolved-node resolved 'medium-reverse))
+       (strong (resolved-node resolved 'strong-forward)))
+  (check 'strong-order-wins-over-medium-order
+         (and (= (field (resolved-node resolved 'a) 'col) 1)
+              (= (field (resolved-node resolved 'b) 'col) 9)
+              (soft-cost=? strong 0 0)
+              (soft-cost=? medium 2 0))))
+
+;; Contributions from groups sharing B retain and sum both cost components.
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact #:col 20)
+               (lt:node 'b 'scope 'compact #:col 1)
+               (lt:node 'c 'scope 'compact #:col 20)
+               (lt:group 'shared-violation #:layout 'horizontal
+                         #:cohesion 'strong 'a 'b)
+               (lt:group 'shared-gap #:layout 'horizontal
+                         #:cohesion 'medium 'b 'c))))
+       (violation (resolved-node resolved 'shared-violation))
+       (gap (resolved-node resolved 'shared-gap))
+       (metadata (resolved-kind resolved 'solver-metadata)))
+  (check 'shared-soft-groups-sum-both-components
+         (and (soft-cost=? violation 3 0)
+              (soft-cost=? gap 0 22)
+              (soft-cost=? metadata 3 22))))
+
+(check 'invalid-cohesion-values
+       (and (rejected?
+             (lambda ()
+               (lt:group 'bad #:layout 'horizontal
+                         #:cohesion 'Strong 'a 'b)))
+            (rejected?
+             (lambda ()
+               (lt:group 'bad #:layout 'horizontal
+                         #:cohesion 3 'a 'b)))))
+
+(let ((resolved
+       (lt:solve
+        (list (lt:group 'soft-forward #:layout 'horizontal
+                        #:cohesion 'strong 'a 'b)
+              (lt:node 'b 'scope 'compact)
+              (lt:node 'a 'scope 'compact)))))
+  (check 'soft-group-forward-references
+         (and (= (field (resolved-node resolved 'a) 'col) 1)
+              (= (field (resolved-node resolved 'b) 'col) 9))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'analog 'meter 'standard #:variant 'analog)
+               (lt:node 'segments 'meter 'compact
+                        #:variant 'segmented-horizontal)
+               (lt:group 'soft-variants #:layout 'horizontal
+                         #:cohesion 'strong 'analog 'segments))))
+       (group (resolved-node resolved 'soft-variants)))
+  (check 'soft-group-variant-aware-members
+         (and (= (field (resolved-node resolved 'analog) 'col) 1)
+              (= (field (resolved-node resolved 'segments) 'col) 10)
+              (soft-cost=? group 0 0)
+              (= (field group 'colSpan) 19))))
 
 (display "topological-layout-test: PASS\n")

@@ -3,6 +3,7 @@
   #:use-module (srfi srfi-1)
   #:use-module (generator-app ui-metrics)
   #:export (lt:node
+            lt:group
             lt:next-right-of
             lt:next-left-of
             lt:next-above
@@ -43,6 +44,56 @@
     (row . ,row)
     (col . ,col)
     (constraints . ,constraints)))
+
+(define (lt:group id . arguments)
+  (unless (symbol? id)
+    (error "Topological layout group id must be a symbol" id))
+  (let* ((parsed
+          (let loop ((remaining arguments)
+                     (layout #f)
+                     (cohesion #f)
+                     (members '()))
+            (cond
+             ((null? remaining)
+              (list layout cohesion (reverse members)))
+             ((eq? (car remaining) #:layout)
+              (when (or layout (null? (cdr remaining)))
+                (error "Invalid or duplicate group #:layout" id arguments))
+              (loop (cddr remaining) (cadr remaining) cohesion members))
+             ((eq? (car remaining) #:cohesion)
+              (when (or cohesion (null? (cdr remaining)))
+                (error "Invalid or duplicate group #:cohesion" id arguments))
+              (loop (cddr remaining) layout (cadr remaining) members))
+             ((keyword? (car remaining))
+              (error "Unknown topological layout group keyword"
+                     id (car remaining)))
+             (else
+              (loop (cdr remaining) layout cohesion
+                    (cons (car remaining) members))))))
+         (layout (list-ref parsed 0))
+         (cohesion (list-ref parsed 1))
+         (members (list-ref parsed 2)))
+    (unless layout
+      (error "Topological layout group requires #:layout" id arguments))
+    (unless (memq layout '(horizontal vertical))
+      (error "Invalid topological layout group layout" id layout))
+    (unless (or (not cohesion) (symbol? cohesion))
+      (error "Topological layout group cohesion must be a symbol"
+             id cohesion))
+    (unless (or (not cohesion) (memq cohesion '(strong medium weak)))
+      (error "Invalid topological layout group cohesion" id cohesion))
+    (unless (>= (length members) 2)
+      (error "Topological layout group requires at least two members"
+             id members))
+    (unless (every symbol? members)
+      (error "Topological layout group members must be node ids" id members))
+    (unless (= (length members) (length (delete-duplicates members eq?)))
+      (error "Duplicate member in topological layout group" id members))
+    `((kind . group)
+      (id . ,id)
+      (layout . ,layout)
+      (cohesion . ,cohesion)
+      (members . ,members))))
 
 (define (make-constraint relation reference)
   (unless (symbol? reference)
@@ -206,7 +257,61 @@
                        (edge id reference-id (- delta)))))
              (cdr ids)))))))
 
-(define (build-axis-edges nodes alignments sizes axis origin)
+(define (group-edges group sizes axis)
+  (let ((layout (field group 'layout))
+        (cohesion (field group 'cohesion))
+        (members (field group 'members)))
+    (if (or cohesion
+            (not (eq? layout (if (eq? axis 'horizontal)
+                                 'horizontal
+                                 'vertical))))
+        '()
+        (append-map
+         (lambda (pair)
+           (let* ((previous-id (car pair))
+                  (current-id (cadr pair))
+                  (previous-size (assoc-ref sizes previous-id))
+                  (extent (if (eq? axis 'horizontal)
+                              (car previous-size)
+                              (cdr previous-size))))
+             (list (edge previous-id current-id extent)
+                   (edge current-id previous-id (- extent)))))
+         (zip members (cdr members))))))
+
+(define (cohesion-weight cohesion)
+  (case cohesion
+    ((strong) 3)
+    ((medium) 2)
+    ((weak) 1)
+    (else (error "Unknown soft cohesion" cohesion))))
+
+;; A wish is (WEIGHT AXIS PREVIOUS CURRENT EXTENT). It remains separate from
+;; the authoritative hard graph until the soft optimization phase.
+(define (soft-wishes groups sizes axis)
+  (append-map
+   (lambda (group)
+     (let ((cohesion (field group 'cohesion))
+           (layout (field group 'layout))
+           (members (field group 'members)))
+       (if (and cohesion
+                (eq? layout (if (eq? axis 'horizontal)
+                                'horizontal
+                                'vertical)))
+           (map
+            (lambda (pair)
+              (let* ((previous-id (car pair))
+                     (current-id (cadr pair))
+                     (size (assoc-ref sizes previous-id))
+                     (extent (if (eq? axis 'horizontal)
+                                 (car size)
+                                 (cdr size))))
+                (list (cohesion-weight cohesion) axis
+                      previous-id current-id extent)))
+            (zip members (cdr members)))
+           '())))
+   groups))
+
+(define (build-axis-edges nodes alignments groups sizes axis origin)
   (append
    ;; Logical coordinates are one-based. This also chooses the deterministic
    ;; earliest solution when inequalities leave free space.
@@ -237,12 +342,18 @@
    (append-map
     (lambda (alignment)
       (alignment-edges alignment nodes sizes axis))
-    alignments)))
+    alignments)
+   (append-map
+    (lambda (group) (group-edges group sizes axis))
+    groups)))
 
-(define (solve-axis nodes alignments sizes axis)
+(define* (solve-axis nodes alignments groups sizes axis
+                     #:optional (extra-edges '()))
   (let* ((origin (gensym "layout-origin-"))
          (vertices (cons origin (map (lambda (node) (field node 'id)) nodes)))
-         (edges (build-axis-edges nodes alignments sizes axis origin))
+         (edges (append
+                 (build-axis-edges nodes alignments groups sizes axis origin)
+                 extra-edges))
          (distances (make-hash-table)))
     (for-each (lambda (vertex) (hashq-set! distances vertex 0)) vertices)
     (let loop ((pass 0))
@@ -263,39 +374,250 @@
           (error "Contradictory hard positional constraints" axis))
          (else (loop (+ pass 1))))))))
 
+(define (try-solve-axis nodes alignments groups sizes axis extra-edges)
+  (catch #t
+    (lambda ()
+      (solve-axis nodes alignments groups sizes axis extra-edges))
+    (lambda args #f)))
+
+(define (wish-gap wish distances)
+  (let ((previous-id (list-ref wish 2))
+        (current-id (list-ref wish 3))
+        (extent (list-ref wish 4)))
+    (- (hashq-ref distances current-id)
+       (+ (hashq-ref distances previous-id) extent))))
+
+(define (make-soft-cost order-violations positive-gap)
+  `((order-violations . ,order-violations)
+    (positive-gap . ,positive-gap)))
+
+(define (add-soft-cost left right)
+  (make-soft-cost
+   (+ (assoc-ref left 'order-violations)
+      (assoc-ref right 'order-violations))
+   (+ (assoc-ref left 'positive-gap)
+      (assoc-ref right 'positive-gap))))
+
+(define (soft-axis-cost wishes distances)
+  (fold (lambda (wish total)
+          (let ((weight (car wish))
+                (gap (wish-gap wish distances)))
+            (add-soft-cost
+             total
+             (if (< gap 0)
+                 (make-soft-cost weight 0)
+                 (make-soft-cost 0 (* weight gap))))))
+        (make-soft-cost 0 0)
+        wishes))
+
+;; Each wish has three finite states: exact adjacency, non-overlap order only,
+;; or no added edge. Exhaustive enumeration is deliberately small and local;
+;; it is not a general LP/MIP solver. Hard-infeasible configurations vanish.
+(define (soft-configurations wishes)
+  (if (null? wishes)
+      (list (list '() 0 0))
+      (let* ((wish (car wishes))
+             (previous-id (list-ref wish 2))
+             (current-id (list-ref wish 3))
+             (extent (list-ref wish 4))
+             (exact-edges
+              (list (edge previous-id current-id extent)
+                    (edge current-id previous-id (- extent))))
+             (order-edge (list (edge previous-id current-id extent))))
+        (append-map
+         (lambda (configuration)
+           (let ((edges (list-ref configuration 0))
+                 (exact-count (list-ref configuration 1))
+                 (order-count (list-ref configuration 2)))
+             (list (list (append exact-edges edges)
+                         (+ exact-count 1) order-count)
+                   (list (append order-edge edges)
+                         exact-count (+ order-count 1))
+                   configuration)))
+         (soft-configurations (cdr wishes))))))
+
+(define (better-soft-solution? cost exact-count order-count best)
+  (if (not best)
+      #t
+      (let* ((best-cost (list-ref best 0))
+             (violations (assoc-ref cost 'order-violations))
+             (best-violations
+              (assoc-ref best-cost 'order-violations))
+             (positive-gap (assoc-ref cost 'positive-gap))
+             (best-positive-gap (assoc-ref best-cost 'positive-gap)))
+        (or (< violations best-violations)
+            (and (= violations best-violations)
+                 (< positive-gap best-positive-gap))
+            (and (= violations best-violations)
+                 (= positive-gap best-positive-gap)
+                 (> exact-count (list-ref best 1)))
+            (and (= violations best-violations)
+                 (= positive-gap best-positive-gap)
+                 (= exact-count (list-ref best 1))
+                 (> order-count (list-ref best 2)))))))
+
+(define (optimize-soft-axis nodes alignments groups sizes axis hard-result)
+  (let ((wishes (soft-wishes groups sizes axis)))
+    (if (null? wishes)
+        hard-result
+        (let loop ((configurations (soft-configurations wishes))
+                   (best #f))
+          (if (null? configurations)
+              (list-ref best 3)
+              (let* ((configuration (car configurations))
+                     (edges (list-ref configuration 0))
+                     (exact-count (list-ref configuration 1))
+                     (order-count (list-ref configuration 2))
+                     (result
+                      (try-solve-axis nodes alignments groups sizes axis edges)))
+                (if result
+                    (let ((cost (soft-axis-cost wishes result)))
+                      (loop
+                       (cdr configurations)
+                       (if (better-soft-solution?
+                            cost exact-count order-count best)
+                           (list cost exact-count order-count result)
+                           best)))
+                    (loop (cdr configurations) best))))))))
+
 (define (validate-node-ids! nodes)
   (let ((ids (map (lambda (node) (field node 'id)) nodes)))
     (unless (= (length ids) (length (delete-duplicates ids eq?)))
       (error "Duplicate topological layout node id" ids))))
 
+(define (validate-groups! groups nodes)
+  (let ((group-ids (map (lambda (group) (field group 'id)) groups))
+        (node-ids (map (lambda (node) (field node 'id)) nodes)))
+    (unless (= (length group-ids)
+               (length (delete-duplicates group-ids eq?)))
+      (error "Duplicate topological layout group id" group-ids))
+    (for-each
+     (lambda (group)
+       (let ((id (field group 'id)))
+         (when (memq id node-ids)
+           (error "Topological layout group id collides with node id" id))
+         (for-each
+          (lambda (member)
+            (unless (memq member node-ids)
+              (error "Missing topological layout group member" id member)))
+          (field group 'members))))
+     groups)))
+
+(define (resolved-group-soft-cost group resolved-nodes)
+  (let ((cohesion (field group 'cohesion)))
+    (if (not cohesion)
+        (make-soft-cost 0 0)
+        (let ((layout (field group 'layout))
+              (weight (cohesion-weight cohesion)))
+          (fold
+           (lambda (pair total)
+             (let* ((previous (node-by-id resolved-nodes (car pair)))
+                    (current (node-by-id resolved-nodes (cadr pair)))
+                    (position-key (if (eq? layout 'horizontal) 'col 'row))
+                    (span-key (if (eq? layout 'horizontal)
+                                  'colSpan
+                                  'rowSpan))
+                    (gap (- (field current position-key)
+                            (+ (field previous position-key)
+                               (field previous span-key)))))
+               (add-soft-cost
+                total
+                (if (< gap 0)
+                    (make-soft-cost weight 0)
+                    (make-soft-cost 0 (* weight gap))))))
+           (make-soft-cost 0 0)
+           (zip (field group 'members)
+                (cdr (field group 'members))))))))
+
+(define (resolved-group group resolved-nodes)
+  (let* ((members (field group 'members))
+         (resolved-members
+          (map (lambda (id) (node-by-id resolved-nodes id)) members))
+         (row (apply min (map (lambda (node) (field node 'row))
+                              resolved-members)))
+         (col (apply min (map (lambda (node) (field node 'col))
+                              resolved-members)))
+         (bottom (apply max
+                        (map (lambda (node)
+                               (+ (field node 'row) (field node 'rowSpan)))
+                             resolved-members)))
+         (right (apply max
+                       (map (lambda (node)
+                              (+ (field node 'col) (field node 'colSpan)))
+                            resolved-members))))
+    `((kind . group)
+      (id . ,(field group 'id))
+      (layout . ,(field group 'layout))
+      (cohesion . ,(field group 'cohesion))
+      (cohesion-weight . ,(and (field group 'cohesion)
+                               (cohesion-weight (field group 'cohesion))))
+      (members . ,members)
+      (row . ,row)
+      (col . ,col)
+      (rowSpan . ,(- bottom row))
+      (colSpan . ,(- right col))
+      (soft-cost . ,(resolved-group-soft-cost group resolved-nodes)))))
+
 (define (lt:solve entries)
   (unless (list? entries)
     (error "Topological layout input must be a list" entries))
   (unless (every (lambda (entry)
-                   (memq (field entry 'kind) '(node alignment)))
+                   (memq (field entry 'kind) '(node alignment group)))
                  entries)
     (error "Invalid topological layout IR entry" entries))
   (let ((nodes (filter (lambda (entry) (eq? (field entry 'kind) 'node))
                        entries))
         (alignments
          (filter (lambda (entry) (eq? (field entry 'kind) 'alignment))
-                 entries)))
+                 entries))
+        (groups (filter (lambda (entry) (eq? (field entry 'kind) 'group))
+                        entries)))
   (validate-node-ids! nodes)
+  (validate-groups! groups nodes)
   (let* ((sizes (map (lambda (node)
                        (cons (field node 'id) (node-size node)))
                      nodes))
-         (columns (solve-axis nodes alignments sizes 'horizontal))
-         (rows (solve-axis nodes alignments sizes 'vertical)))
-    (map
-     (lambda (node)
-       (let* ((id (field node 'id))
-              (size (assoc-ref sizes id)))
-         `((id . ,id)
-           (type . ,(field node 'type))
-           (variant . ,(field node 'variant))
-           (profile . ,(field node 'profile))
-           (row . ,(hashq-ref rows id))
-           (col . ,(hashq-ref columns id))
-           (rowSpan . ,(cdr size))
-           (colSpan . ,(car size)))))
-     nodes))))
+         ;; Phase 1: authoritative hard validation and earliest hard solution.
+         (hard-columns
+          (solve-axis nodes alignments groups sizes 'horizontal))
+         (hard-rows
+          (solve-axis nodes alignments groups sizes 'vertical))
+         ;; Phase 2: finite soft optimization among hard-valid solutions.
+         (columns
+          (optimize-soft-axis nodes alignments groups sizes
+                              'horizontal hard-columns))
+         (rows
+          (optimize-soft-axis nodes alignments groups sizes
+                              'vertical hard-rows))
+         (resolved-nodes
+          (map
+           (lambda (node)
+             (let* ((id (field node 'id))
+                    (size (assoc-ref sizes id)))
+               `((id . ,id)
+                 (type . ,(field node 'type))
+                 (variant . ,(field node 'variant))
+                 (profile . ,(field node 'profile))
+                 (row . ,(hashq-ref rows id))
+                 (col . ,(hashq-ref columns id))
+                 (rowSpan . ,(cdr size))
+                 (colSpan . ,(car size)))))
+           nodes))
+         (resolved-groups
+          (map (lambda (group) (resolved-group group resolved-nodes))
+               groups))
+         (soft-groups
+          (filter (lambda (group) (field group 'cohesion))
+                  resolved-groups))
+         (total-soft-cost
+          (fold (lambda (group total)
+                  (add-soft-cost total (field group 'soft-cost)))
+                (make-soft-cost 0 0)
+                soft-groups)))
+    (append resolved-nodes
+            resolved-groups
+            (if (null? soft-groups)
+                '()
+                (list
+                 `((kind . solver-metadata)
+                   (soft-cost . ,total-soft-cost))))))))
