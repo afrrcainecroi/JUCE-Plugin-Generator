@@ -52,27 +52,38 @@
           (let loop ((remaining arguments)
                      (layout #f)
                      (cohesion #f)
+                     (area #f)
+                     (area-seen? #f)
                      (members '()))
             (cond
              ((null? remaining)
-              (list layout cohesion (reverse members)))
+              (list layout cohesion area area-seen? (reverse members)))
              ((eq? (car remaining) #:layout)
               (when (or layout (null? (cdr remaining)))
                 (error "Invalid or duplicate group #:layout" id arguments))
-              (loop (cddr remaining) (cadr remaining) cohesion members))
+              (loop (cddr remaining) (cadr remaining) cohesion area
+                    area-seen? members))
              ((eq? (car remaining) #:cohesion)
               (when (or cohesion (null? (cdr remaining)))
                 (error "Invalid or duplicate group #:cohesion" id arguments))
-              (loop (cddr remaining) layout (cadr remaining) members))
+              (loop (cddr remaining) layout (cadr remaining) area
+                    area-seen? members))
+             ((eq? (car remaining) #:area)
+              (when (or area-seen? (null? (cdr remaining)))
+                (error "Invalid or duplicate group #:area" id arguments))
+              (loop (cddr remaining) layout cohesion (cadr remaining)
+                    #t members))
              ((keyword? (car remaining))
               (error "Unknown topological layout group keyword"
                      id (car remaining)))
              (else
-              (loop (cdr remaining) layout cohesion
+              (loop (cdr remaining) layout cohesion area area-seen?
                     (cons (car remaining) members))))))
          (layout (list-ref parsed 0))
          (cohesion (list-ref parsed 1))
-         (members (list-ref parsed 2)))
+         (area (list-ref parsed 2))
+         (area-seen? (list-ref parsed 3))
+         (members (list-ref parsed 4)))
     (unless layout
       (error "Topological layout group requires #:layout" id arguments))
     (unless (memq layout '(horizontal vertical))
@@ -82,6 +93,13 @@
              id cohesion))
     (unless (or (not cohesion) (memq cohesion '(strong medium weak)))
       (error "Invalid topological layout group cohesion" id cohesion))
+    (unless (or (not area-seen?) (symbol? area))
+      (error "Topological layout group area must be a symbol" id area))
+    (unless (or (not area-seen?)
+                (memq area '(top-left top top-right
+                             left center right
+                             bottom-left bottom bottom-right)))
+      (error "Invalid topological layout group area" id area))
     (unless (>= (length members) 2)
       (error "Topological layout group requires at least two members"
              id members))
@@ -93,6 +111,7 @@
       (id . ,id)
       (layout . ,layout)
       (cohesion . ,cohesion)
+      (area . ,(and area-seen? area))
       (members . ,members))))
 
 (define (make-constraint relation reference)
@@ -347,13 +366,21 @@
     (lambda (group) (group-edges group sizes axis))
     groups)))
 
+(define (screen-bound-edge bound origin)
+  (case (car bound)
+    ((lower) (edge origin (cadr bound) (caddr bound)))
+    ((upper) (edge (cadr bound) origin (- (caddr bound))))
+    (else (error "Unknown logical screen bound" bound))))
+
 (define* (solve-axis nodes alignments groups sizes axis
-                     #:optional (extra-edges '()))
+                     #:optional (extra-edges '()) (extra-bounds '()))
   (let* ((origin (gensym "layout-origin-"))
          (vertices (cons origin (map (lambda (node) (field node 'id)) nodes)))
          (edges (append
                  (build-axis-edges nodes alignments groups sizes axis origin)
-                 extra-edges))
+                 extra-edges
+                 (map (lambda (bound) (screen-bound-edge bound origin))
+                      extra-bounds)))
          (distances (make-hash-table)))
     (for-each (lambda (vertex) (hashq-set! distances vertex 0)) vertices)
     (let loop ((pass 0))
@@ -374,10 +401,100 @@
           (error "Contradictory hard positional constraints" axis))
          (else (loop (+ pass 1))))))))
 
-(define (try-solve-axis nodes alignments groups sizes axis extra-edges)
+(define (area-axis-index area axis)
+  (case area
+    ((top-left) 0)
+    ((top) (if (eq? axis 'horizontal) 1 0))
+    ((top-right) (if (eq? axis 'horizontal) 2 0))
+    ((left) (if (eq? axis 'horizontal) 0 1))
+    ((center) 1)
+    ((right) (if (eq? axis 'horizontal) 2 1))
+    ((bottom-left) (if (eq? axis 'horizontal) 0 2))
+    ((bottom) (if (eq? axis 'horizontal) 1 2))
+    ((bottom-right) 2)
+    (else (error "Unknown topological screen area" area))))
+
+;; Groups remain derived IR objects, never graph vertices. For each hard-valid
+;; candidate, member offsets are frozen relative to the first member and the
+;; reference is bounded so that the derived group center lies in its third.
+(define (area-placement-constraints groups sizes axis distances screen-size)
+  (fold
+   (lambda (group result)
+     (let ((area (field group 'area)))
+       (if (not area)
+           result
+           (let* ((members (field group 'members))
+                  (reference-id (car members))
+                  (reference-position (hashq-ref distances reference-id))
+                  (positions
+                   (map (lambda (id) (hashq-ref distances id)) members))
+                  (ends
+                   (map (lambda (id)
+                          (+ (hashq-ref distances id)
+                             (let ((size (assoc-ref sizes id)))
+                               (if (eq? axis 'horizontal)
+                                   (car size)
+                                   (cdr size)))))
+                        members))
+                  (start (apply min positions))
+                  (end (apply max ends))
+                  (span (- end start))
+                  (third (/ screen-size 3))
+                  (index (area-axis-index area axis))
+                  (center-offset (+ (- start reference-position) (/ span 2)))
+                  (center-lower (+ 1 (* index third)))
+                  (center-upper (+ 1 (* (+ index 1) third)))
+                  (rigid-edges
+                   (append-map
+                    (lambda (id)
+                      (let ((offset (- (hashq-ref distances id)
+                                       reference-position)))
+                        (list (edge reference-id id offset)
+                              (edge id reference-id (- offset)))))
+                    (cdr members)))
+                  (screen-bounds
+                   (append-map
+                    (lambda (id)
+                      (let* ((size (assoc-ref sizes id))
+                             (extent (if (eq? axis 'horizontal)
+                                         (car size)
+                                         (cdr size))))
+                        (list (list 'lower id 1)
+                              (list 'upper id (+ 1 (- screen-size extent))))))
+                    members)))
+             (when (> span screen-size)
+               (error "Topological layout group cannot fit logical screen"
+                      (field group 'id) axis span screen-size))
+             (list (append (car result) rigid-edges)
+                   (append (cadr result)
+                           (list
+                            (list 'lower reference-id
+                                  (- center-lower center-offset))
+                            (list 'upper reference-id
+                                  (- center-upper center-offset)))
+                           screen-bounds))))))
+   (list '() '())
+   groups))
+
+(define (solve-area-axis nodes alignments groups sizes axis screen-size
+                         extra-edges)
+  (let ((initial
+         (solve-axis nodes alignments groups sizes axis extra-edges)))
+    (if (not screen-size)
+        initial
+        (let ((placement
+               (area-placement-constraints
+                groups sizes axis initial screen-size)))
+          (solve-axis nodes alignments groups sizes axis
+                      (append extra-edges (car placement))
+                      (cadr placement))))))
+
+(define (try-solve-axis nodes alignments groups sizes axis screen-size
+                        extra-edges)
   (catch #t
     (lambda ()
-      (solve-axis nodes alignments groups sizes axis extra-edges))
+      (solve-area-axis nodes alignments groups sizes axis
+                       screen-size extra-edges))
     (lambda args #f)))
 
 (define (wish-gap wish distances)
@@ -456,20 +573,25 @@
                  (= exact-count (list-ref best 1))
                  (> order-count (list-ref best 2)))))))
 
-(define (optimize-soft-axis nodes alignments groups sizes axis hard-result)
+(define (optimize-soft-axis nodes alignments groups sizes axis screen-size
+                            hard-result)
   (let ((wishes (soft-wishes groups sizes axis)))
     (if (null? wishes)
         hard-result
         (let loop ((configurations (soft-configurations wishes))
                    (best #f))
           (if (null? configurations)
-              (list-ref best 3)
+              (if best
+                  (list-ref best 3)
+                  (error "No solution satisfies hard screen area constraints"
+                         axis))
               (let* ((configuration (car configurations))
                      (edges (list-ref configuration 0))
                      (exact-count (list-ref configuration 1))
                      (order-count (list-ref configuration 2))
                      (result
-                      (try-solve-axis nodes alignments groups sizes axis edges)))
+                      (try-solve-axis nodes alignments groups sizes axis
+                                      screen-size edges)))
                 (if result
                     (let ((cost (soft-axis-cost wishes result)))
                       (loop
@@ -549,6 +671,7 @@
       (id . ,(field group 'id))
       (layout . ,(field group 'layout))
       (cohesion . ,(field group 'cohesion))
+      (area . ,(field group 'area))
       (cohesion-weight . ,(and (field group 'cohesion)
                                (cohesion-weight (field group 'cohesion))))
       (members . ,members)
@@ -558,7 +681,7 @@
       (colSpan . ,(- right col))
       (soft-cost . ,(resolved-group-soft-cost group resolved-nodes)))))
 
-(define (lt:solve entries)
+(define* (lt:solve entries #:key screen-rows screen-cols)
   (unless (list? entries)
     (error "Topological layout input must be a list" entries))
   (unless (every (lambda (entry)
@@ -574,21 +697,34 @@
                         entries)))
   (validate-node-ids! nodes)
   (validate-groups! groups nodes)
+  (let ((area-groups (filter (lambda (group) (field group 'area)) groups)))
+    (when (or screen-rows screen-cols (not (null? area-groups)))
+      (unless (and screen-rows screen-cols)
+        (error "Logical screen rows and columns are both required"
+               screen-rows screen-cols))
+      (unless (and (integer? screen-rows) (exact? screen-rows)
+                   (> screen-rows 0)
+                   (integer? screen-cols) (exact? screen-cols)
+                   (> screen-cols 0))
+        (error "Logical screen dimensions must be positive exact integers"
+               screen-rows screen-cols))))
   (let* ((sizes (map (lambda (node)
                        (cons (field node 'id) (node-size node)))
                      nodes))
          ;; Phase 1: authoritative hard validation and earliest hard solution.
          (hard-columns
-          (solve-axis nodes alignments groups sizes 'horizontal))
+          (solve-area-axis nodes alignments groups sizes 'horizontal
+                           screen-cols '()))
          (hard-rows
-          (solve-axis nodes alignments groups sizes 'vertical))
+          (solve-area-axis nodes alignments groups sizes 'vertical
+                           screen-rows '()))
          ;; Phase 2: finite soft optimization among hard-valid solutions.
          (columns
           (optimize-soft-axis nodes alignments groups sizes
-                              'horizontal hard-columns))
+                              'horizontal screen-cols hard-columns))
          (rows
           (optimize-soft-axis nodes alignments groups sizes
-                              'vertical hard-rows))
+                              'vertical screen-rows hard-rows))
          (resolved-nodes
           (map
            (lambda (node)

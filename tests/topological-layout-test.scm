@@ -770,4 +770,165 @@
               (soft-cost=? group 0 0)
               (= (field group 'colSpan) 19))))
 
+;; A compact toggle pair is 8x3. On a 15x24 logical screen the deterministic
+;; earliest centers for the three columns are 5, 9, 17; for rows 5/2, 6, 11.
+(define area-cases
+  '((top-left 1 1)
+    (top 5 1)
+    (top-right 13 1)
+    (left 1 9/2)
+    (center 5 9/2)
+    (right 13 9/2)
+    (bottom-left 1 19/2)
+    (bottom 5 19/2)
+    (bottom-right 13 19/2)))
+
+(for-each
+ (lambda (case)
+   (let* ((area (list-ref case 0))
+          (expected-col (list-ref case 1))
+          (expected-row (list-ref case 2))
+          (resolved
+           (lt:solve
+            (list (lt:node 'a 'toggle-button 'compact)
+                  (lt:node 'b 'toggle-button 'compact)
+                  (lt:group 'area-group #:layout 'horizontal
+                            #:area area 'a 'b))
+            #:screen-rows 15 #:screen-cols 24))
+          (group (resolved-node resolved 'area-group)))
+     (check (string->symbol (string-append "area-" (symbol->string area)))
+            (and (eq? (field group 'area) area)
+                 (= (field group 'col) expected-col)
+                 (= (field group 'row) expected-row)
+                 (= (field group 'colSpan) 8)
+                 (= (field group 'rowSpan) 3)
+                 (= (- (field (resolved-node resolved 'b) 'col)
+                       (field (resolved-node resolved 'a) 'col))
+                    4)))))
+ area-cases)
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'text-button 'compact)
+               (lt:node 'b 'text-button 'compact)
+               (lt:group 'vertical-area #:layout 'vertical
+                         #:area 'bottom 'a 'b))
+         #:screen-rows 15 #:screen-cols 24))
+       (group (resolved-node resolved 'vertical-area)))
+  (check 'area-with-hard-vertical-layout
+         (and (= (- (field (resolved-node resolved 'b) 'row)
+                    (field (resolved-node resolved 'a) 'row))
+                 2)
+              (= (field group 'rowSpan) 4)
+              (eq? (field group 'area) 'bottom))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'toggle-button 'compact)
+               (lt:node 'b 'toggle-button 'compact)
+               (lt:group 'soft-area #:layout 'horizontal
+                         #:area 'bottom-right #:cohesion 'strong 'a 'b))
+         #:screen-rows 15 #:screen-cols 24))
+       (group (resolved-node resolved 'soft-area)))
+  (check 'area-with-soft-cohesion
+         (and (= (- (field (resolved-node resolved 'b) 'col)
+                    (field (resolved-node resolved 'a) 'col))
+                 4)
+              (soft-cost=? group 0 0)
+              (eq? (field group 'area) 'bottom-right))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'meter 'compact
+                        #:variant 'segmented-horizontal)
+               (lt:node 'b 'meter 'compact
+                        #:variant 'segmented-horizontal)
+               (lt:group 'variant-area #:layout 'horizontal
+                         #:area 'right #:cohesion 'weak 'a 'b))
+         #:screen-rows 15 #:screen-cols 24))
+       (group (resolved-node resolved 'variant-area)))
+  (check 'area-variant-aware-members
+         (and (eq? (field (resolved-node resolved 'a) 'variant)
+                   'segmented-horizontal)
+              (eq? (field group 'area) 'right)
+              (<= (+ (field group 'col) (field group 'colSpan)) 25))))
+
+(let ((resolved
+       (lt:solve
+        (list (lt:group 'forward-area #:layout 'horizontal
+                        #:area 'top-right 'a 'b)
+              (lt:node 'b 'toggle-button 'compact)
+              (lt:node 'a 'toggle-button 'compact))
+        #:screen-rows 15 #:screen-cols 24)))
+  (check 'area-group-forward-reference
+         (and (= (field (resolved-node resolved 'b) 'col)
+                 (+ (field (resolved-node resolved 'a) 'col) 4))
+              (eq? (field (resolved-node resolved 'forward-area) 'area)
+                   'top-right))))
+
+(check 'invalid-group-area
+       (and (rejected?
+             (lambda ()
+               (lt:group 'bad #:layout 'horizontal #:area 'Top 'a 'b)))
+            (rejected?
+             (lambda ()
+               (lt:group 'bad #:layout 'horizontal #:area '(top) 'a 'b)))
+            (rejected?
+             (lambda ()
+               (lt:group 'bad #:layout 'horizontal #:area #f 'a 'b)))))
+
+(check 'area-requires-screen-dimensions
+       (rejected?
+        (lambda ()
+          (lt:solve
+           (list (lt:node 'a 'toggle-button 'compact)
+                 (lt:node 'b 'toggle-button 'compact)
+                 (lt:group 'g #:layout 'horizontal #:area 'top 'a 'b))))))
+
+(check 'invalid-screen-dimensions
+       (and (rejected?
+             (lambda ()
+               (lt:solve '() #:screen-rows 0 #:screen-cols 24)))
+            (rejected?
+             (lambda ()
+               (lt:solve '() #:screen-rows 15 #:screen-cols -1)))
+            (rejected?
+             (lambda ()
+               (lt:solve '() #:screen-rows 15)))))
+
+(check 'area-group-too-large-for-screen
+       (rejected?
+        (lambda ()
+          (lt:solve
+           (list (lt:node 'a 'header 'extended)
+                 (lt:node 'b 'text-button 'compact)
+                 (lt:group 'too-wide #:layout 'horizontal
+                           #:area 'center 'a 'b))
+           #:screen-rows 15 #:screen-cols 24))))
+
+(check 'anchor-incompatible-with-area
+       (rejected?
+        (lambda ()
+          (lt:solve
+           (list (lt:node 'a 'toggle-button 'compact #:col 1)
+                 (lt:node 'b 'toggle-button 'compact)
+                 (lt:group 'anchored #:layout 'horizontal
+                           #:area 'top-right 'a 'b))
+           #:screen-rows 15 #:screen-cols 24))))
+
+;; Translation into the bottom-right third preserves both axis offsets.
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'toggle-button 'compact)
+               (lt:node 'b 'toggle-button 'compact)
+               (lt:group 'rigid #:layout 'horizontal
+                         #:area 'bottom-right 'a 'b)
+               (lt:align-top 'a 'b))
+         #:screen-rows 15 #:screen-cols 24))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b)))
+  (check 'area-translation-preserves-relative-distances
+         (and (= (- (field b 'col) (field a 'col)) 4)
+              (= (- (field b 'row) (field a 'row)) 0))))
+
 (display "topological-layout-test: PASS\n")
