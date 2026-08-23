@@ -104,7 +104,7 @@
 	    ;; 'segmented oppure 'analog
 	    (style 'segmented)
 	    ;; proprietà grafiche del KineticMeter
-	    (scale-type 'default)
+	    (scale-type 'db)
 	    (is-sharp #f)
 	    (glow-multiplier 1.0)
 	    (range-min -60.0)

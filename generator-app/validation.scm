@@ -159,6 +159,11 @@
     (error "Invalid meter style"
            (component:id m)
            (meter:style m)))
+  (unless (memq (meter:scale-type m)
+                '(db linear vu))
+    (error "Invalid meter scale-type; expected one of (db linear vu)"
+           (component:id m)
+           (meter:scale-type m)))
   (unless (< (meter:range-min m)
              (meter:range-max m))
     (error "Meter range-min must be less than range-max"

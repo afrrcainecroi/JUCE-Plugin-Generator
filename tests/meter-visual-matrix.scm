@@ -124,13 +124,13 @@
                       '(#:style segmented #:scale-type db #:num-segments 20))
   (make-vertical-case "D" "PEAK" 35
                       '(#:style segmented #:scale-type db #:num-segments 20))
-  (make-vertical-case "E" "SCALE LABELS DB" 46
+  (make-vertical-case "E" "SCALE DB" 46
                       '(#:style segmented #:scale-type db #:num-segments 20))
-  (make-vertical-case "F" "SCALE-TYPE DEFAULT" 57
-                      '(#:style segmented #:scale-type default #:num-segments 20))
-  (make-vertical-case "G" "SEGMENTED 8" 68
-                      '(#:style segmented #:scale-type db #:num-segments 8))
-  (make-vertical-case "H" "SINGLE SEGMENT" 79
+  (make-vertical-case "F" "SCALE LINEAR" 57
+                      '(#:style segmented #:scale-type linear #:num-segments 20))
+  (make-vertical-case "G" "SCALE VU" 68
+                      '(#:style segmented #:scale-type vu #:num-segments 8))
+  (make-vertical-case "H" "SCALE LINEAR / SINGLE SEGMENT" 79
                       '(#:style segmented #:scale-type linear #:num-segments 1))
 
   ;; Segmented horizontal.  Four cases per row keep the exact 10x3, 14x4 and
@@ -143,26 +143,26 @@
                         '(#:style segmented #:scale-type db #:num-segments 20))
   (make-horizontal-case "D" "PEAK" 52 68
                         '(#:style segmented #:scale-type db #:num-segments 20))
-  (make-horizontal-case "E" "SCALE LABELS" 72 2
+  (make-horizontal-case "E" "SCALE DB" 72 2
                         '(#:style segmented #:scale-type db #:num-segments 20))
-  (make-horizontal-case "F" "DEFAULT SCALE" 72 24
-                        '(#:style segmented #:scale-type default #:num-segments 20))
-  (make-horizontal-case "G" "SEGMENTED 8" 72 46
-                        '(#:style segmented #:scale-type db #:num-segments 8))
-  (make-horizontal-case "H" "LINEAR LABELS" 72 68
+  (make-horizontal-case "F" "SCALE LINEAR" 72 24
+                        '(#:style segmented #:scale-type linear #:num-segments 20))
+  (make-horizontal-case "G" "SCALE VU / SEGMENTED 8" 72 46
+                        '(#:style segmented #:scale-type vu #:num-segments 8))
+  (make-horizontal-case "H" "SCALE LINEAR" 72 68
                         '(#:style segmented #:scale-type linear #:num-segments 20))
 
   ;; Analog: square-ish profiles plus a deliberately narrow 6x9 diagnostic
   ;; in case F.  It tests the height-only radius calculation without changing
   ;; the three requested profile contracts.
-  (make-analog-case "A" "LOW / NEEDLE" 2
+  (make-analog-case "A" "SCALE DB / LOW NEEDLE" 2
                     '(#:scale-type db))
-  (make-analog-case "B" "MEDIUM / NEEDLE" 17
+  (make-analog-case "B" "SCALE LINEAR / MEDIUM NEEDLE" 17
+                    '(#:scale-type linear))
+  (make-analog-case "C" "SCALE VU / HIGH NEEDLE" 32
+                    '(#:scale-type vu))
+  (make-analog-case "D" "SCALE DB + LABELS" 47
                     '(#:scale-type db))
-  (make-analog-case "C" "HIGH / NEEDLE" 32
-                    '(#:scale-type db))
-  (make-analog-case "D" "SCALE + LABELS" 47
-                    '(#:scale-type default))
   (make-analog-case "E" "SHARP NEEDLE" 62
                     '(#:scale-type db #:is-sharp #t))
   (make-caption "meterAnalogFNarrow" "F NARROW 6x9 RADIUS CLIP" 94 77 13)
