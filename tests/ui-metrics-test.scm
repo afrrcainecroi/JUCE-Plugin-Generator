@@ -693,6 +693,84 @@
             (analog . level)
             (analog . sharp)))))
 
+(let* ((metrics (ui-metrics 'scope))
+       (technical-min (field metrics 'technical-min))
+       (natural-geometry (field metrics 'natural-geometry))
+       (capabilities (field metrics 'capabilities))
+       (content-dependent (field metrics 'content-dependent))
+       (grid-style (field content-dependent 'grid-style))
+       (renderer-geometry (field metrics 'renderer-geometry)))
+  (check 'scope-present metrics)
+  (check 'scope-technical-min-not-normative
+         (and (not (field technical-min 'normative?))
+              (eq? (field technical-min 'status) 'to-be-derived)
+              (not (field technical-min 'width))
+              (not (field technical-min 'height))))
+  (check 'scope-base-contract
+         (and (equal? (field metrics 'visual-min)
+                      '((width . 8) (height . 6)))
+              (equal? (field metrics 'preferred)
+                      '((width . 12) (height . 8)))
+              (equal? (field metrics 'useful-max)
+                      '((width . 16) (height . 10)))
+              (eq? (field metrics 'visual-min-profile) 'compact)
+              (eq? (field metrics 'preferred-profile) 'standard)
+              (eq? (field metrics 'useful-max-profile) 'extended)))
+  (check 'scope-profiles
+         (and (equal? (ui-profile 'scope 'compact)
+                      '((width . 8) (height . 6)))
+              (equal? (ui-profile 'scope 'standard)
+                      '((width . 12) (height . 8)))
+              (equal? (ui-profile 'scope 'extended)
+                      '((width . 16) (height . 10)))))
+  (check 'scope-natural-geometry
+         (equal? natural-geometry
+                 '((form . waveform-scope)
+                   (orientation . horizontal)
+                   (aspect-class . moderately-panoramic))))
+  (check 'scope-capabilities
+         (equal? capabilities
+                 '(grid-style waveform amplitude-labels is-sharp
+                              glow-multiplier runtime-signal)))
+  (check 'scope-grid-style-metadata
+         (and (equal? (field grid-style 'canonical-values)
+                      '(radar minimal))
+              (eq? (field grid-style 'footprint-effect) 'none)))
+  (check 'scope-content-does-not-affect-footprint
+         (every (lambda (capability)
+                  (eq? (field (field content-dependent capability)
+                              'footprint-effect)
+                       'none))
+                '(grid-style waveform amplitude-labels is-sharp
+                             glow-multiplier runtime-signal)))
+  (check 'scope-content-does-not-change-profile
+         (every (lambda (capability)
+                  (and (not (ui-capability-profile
+                             'scope #f (list capability)
+                             'preferred-profile))
+                       (not (ui-capability-profile
+                             'scope #f (list capability)
+                             'minimum-visual-profile))))
+                '(grid-style waveform amplitude-labels is-sharp
+                             glow-multiplier runtime-signal)))
+  (check 'scope-grid-style-has-no-geometric-variants
+         (and (not (field metrics 'variants))
+              (not (ui-profile 'scope 'radar 'compact))
+              (not (ui-profile 'scope 'minimal 'compact))
+              (equal? (ui-profile 'scope 'compact)
+                      '((width . 8) (height . 6)))
+              (equal? (ui-profile 'scope 'standard)
+                      '((width . 12) (height . 8)))
+              (equal? (ui-profile 'scope 'extended)
+                      '((width . 16) (height . 10)))))
+  (check 'scope-renderer-geometry-metadata
+         (and (= (field (field renderer-geometry 'label-region)
+                        'fixed-width-px)
+                 30)
+              (= (field (field renderer-geometry 'plot-inset)
+                        'fixed-px)
+                 4))))
+
 ;; Every TYPE registered before link retains its profile API.
 (check 'all-existing-types-backward-compatible
        (and (equal? (ui-profile 'rotary-slider 'compact)
@@ -720,7 +798,13 @@
             (equal? (ui-profile 'selector 'standard)
                     '((width . 12) (height . 2)))
             (equal? (ui-profile 'palette-selector 'standard)
-                    '((width . 12) (height . 2)))))
+                    '((width . 12) (height . 2)))
+            (equal? (ui-profile 'meter 'segmented-vertical 'standard)
+                    '((width . 4) (height . 14)))
+            (equal? (ui-profile 'meter 'segmented-horizontal 'standard)
+                    '((width . 14) (height . 4)))
+            (equal? (ui-profile 'meter 'analog 'standard)
+                    '((width . 9) (height . 7)))))
 
 ;; Recheck both pre-existing profile APIs after registering new TYPEs.
 (check 'rotary-backward-compatibility-after-extension

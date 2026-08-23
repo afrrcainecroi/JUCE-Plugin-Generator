@@ -709,3 +709,44 @@
          . ((variant . analog)
             (capabilities-all . (scale-labels))))
         (preferred-profile . standard))))))
+
+(register-ui-metrics!
+ 'scope
+ '((technical-min
+    . ((normative? . #f)
+       (status . to-be-derived)
+       (width . #f)
+       (height . #f)))
+   (visual-min . ((width . 8) (height . 6)))
+   (preferred . ((width . 12) (height . 8)))
+   (useful-max . ((width . 16) (height . 10)))
+   (visual-min-profile . compact)
+   (preferred-profile . standard)
+   (useful-max-profile . extended)
+   (profiles
+    . ((compact . ((width . 8) (height . 6)))
+       (standard . ((width . 12) (height . 8)))
+       (extended . ((width . 16) (height . 10)))))
+   (natural-geometry
+    . ((form . waveform-scope)
+       (orientation . horizontal)
+       (aspect-class . moderately-panoramic)))
+   (capabilities
+    . (grid-style waveform amplitude-labels is-sharp glow-multiplier
+                  runtime-signal))
+   (content-dependent
+    . ((grid-style
+        . ((canonical-values . (radar minimal))
+           (footprint-effect . none)))
+       (waveform . ((footprint-effect . none)))
+       (amplitude-labels
+        . ((footprint-effect . none)
+           (classification . structural-renderer-content)))
+       (is-sharp . ((footprint-effect . none)))
+       (glow-multiplier . ((footprint-effect . none)))
+       (runtime-signal . ((footprint-effect . none)))))
+   ;; Descriptive renderer geometry only. These fixed pixel regions do not
+   ;; alter logical layout profiles and are not consumed by layout.
+   (renderer-geometry
+    . ((label-region . ((fixed-width-px . 30)))
+       (plot-inset . ((fixed-px . 4)))))))
