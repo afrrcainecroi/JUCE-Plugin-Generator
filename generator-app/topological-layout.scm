@@ -22,19 +22,23 @@
 ;; Experimental logical layout IR. It is intentionally independent from the
 ;; component DSL, the JUCE grid emitter, screen dimensions and pixels.
 (define* (lt:node id type profile
-                  #:key row col (constraints '()))
+                  #:key (variant #f) row col (constraints '()))
   (unless (symbol? id)
     (error "Topological layout node id must be a symbol" id))
   (unless (symbol? type)
     (error "Topological layout TYPE must be a symbol" id type))
   (unless (symbol? profile)
     (error "Topological layout profile must be a symbol" id profile))
+  (unless (or (not variant) (symbol? variant))
+    (error "Topological layout variant must be a symbol or #f"
+           id variant))
   (unless (and (or (not row) (integer? row))
                (or (not col) (integer? col)))
     (error "Topological layout anchors must be integers" id row col))
   `((kind . node)
     (id . ,id)
     (type . ,type)
+    (variant . ,variant)
     (profile . ,profile)
     (row . ,row)
     (col . ,col)
@@ -91,13 +95,29 @@
   (find (lambda (node) (eq? (field node 'id) id)) nodes))
 
 (define (node-size node)
-  (let ((size (ui-profile (field node 'type) (field node 'profile))))
-    (unless size
-      (error "Missing logical UI metrics profile"
-             (field node 'id)
-             (field node 'type)
-             (field node 'profile)))
-    (cons (field size 'width) (field size 'height))))
+  (let* ((id (field node 'id))
+         (type (field node 'type))
+         (variant (field node 'variant))
+         (profile (field node 'profile))
+         (metrics (ui-metrics type)))
+    (unless metrics
+      (error "Unknown UI metrics TYPE" id type))
+    (if variant
+        (let* ((variants (field metrics 'variants))
+               (variant-entry (and variants (assoc variant variants))))
+          (unless variants
+            (error "UI metrics TYPE has no variants" id type variant))
+          (unless variant-entry
+            (error "Unknown UI metrics variant" id type variant))
+          (let ((size (ui-profile type variant profile)))
+            (unless size
+              (error "Missing UI metrics profile for variant"
+                     id type variant profile))
+            (cons (field size 'width) (field size 'height))))
+        (let ((size (ui-profile type profile)))
+          (unless size
+            (error "Missing logical UI metrics profile" id type profile))
+          (cons (field size 'width) (field size 'height))))))
 
 ;; An edge (U V W) represents V >= U + W. Equalities are represented by
 ;; their two opposite inequalities. A positive-weight cycle is impossible.
@@ -272,6 +292,7 @@
               (size (assoc-ref sizes id)))
          `((id . ,id)
            (type . ,(field node 'type))
+           (variant . ,(field node 'variant))
            (profile . ,(field node 'profile))
            (row . ,(hashq-ref rows id))
            (col . ,(hashq-ref columns id))

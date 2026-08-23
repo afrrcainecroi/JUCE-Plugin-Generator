@@ -256,4 +256,100 @@
               (integer? (field b 'rowSpan))
               (integer? (field b 'colSpan)))))
 
+;; Variant-aware metric lookup remains part of the same lt:node API.
+(let ((node (car (lt:solve (list (lt:node 's 'scope 'standard))))))
+  (check 'nonvariant-scope-standard
+         (and (not (field node 'variant))
+              (= (field node 'colSpan) 12)
+              (= (field node 'rowSpan) 8))))
+
+(let ((node (car (lt:solve
+                  (list (lt:node 'm 'meter 'standard #:variant 'analog))))))
+  (check 'meter-analog-standard
+         (and (eq? (field node 'type) 'meter)
+              (eq? (field node 'variant) 'analog)
+              (eq? (field node 'profile) 'standard)
+              (= (field node 'colSpan) 9)
+              (= (field node 'rowSpan) 7))))
+
+(let ((node
+       (car (lt:solve
+             (list (lt:node 'm 'meter 'standard
+                            #:variant 'segmented-horizontal))))))
+  (check 'meter-segmented-horizontal-standard
+         (and (= (field node 'colSpan) 14)
+              (= (field node 'rowSpan) 4))))
+
+(let ((node
+       (car (lt:solve
+             (list (lt:node 'm 'meter 'compact
+                            #:variant 'segmented-vertical))))))
+  (check 'meter-segmented-vertical-compact
+         (and (= (field node 'colSpan) 3)
+              (= (field node 'rowSpan) 10))))
+
+(check 'unknown-meter-variant
+       (rejected?
+        (lambda ()
+          (lt:solve
+           (list (lt:node 'm 'meter 'standard #:variant 'unknown))))))
+
+(check 'scope-radar-is-not-metric-variant
+       (rejected?
+        (lambda ()
+          (lt:solve
+           (list (lt:node 's 'scope 'compact #:variant 'radar))))))
+
+(check 'unknown-profile-in-valid-variant
+       (rejected?
+        (lambda ()
+          (lt:solve
+           (list (lt:node 'm 'meter 'unknown #:variant 'analog))))))
+
+(check 'unknown-metrics-type
+       (rejected?
+        (lambda ()
+          (lt:solve (list (lt:node 'x 'unknown-type 'compact))))))
+
+(let ((resolved
+       (lt:solve
+        (list (lt:node 'scope 'scope 'compact)
+              (lt:node 'meter 'meter 'standard #:variant 'analog
+                       #:constraints (list (lt:next-right-of 'scope)))))))
+  (check 'variant-to-nonvariant-position
+         (and (= (field (resolved-node resolved 'scope) 'col) 1)
+              (= (field (resolved-node resolved 'meter) 'col) 9)
+              (= (field (resolved-node resolved 'meter) 'colSpan) 9))))
+
+(let ((resolved
+       (lt:solve
+        (list (lt:node 'analog 'meter 'standard #:variant 'analog)
+              (lt:node 'horizontal 'meter 'standard
+                       #:variant 'segmented-horizontal)
+              (lt:align-right 'analog 'horizontal)))))
+  (check 'alignment-between-meter-variants
+         (= (+ (field (resolved-node resolved 'analog) 'col) 9)
+            (+ (field (resolved-node resolved 'horizontal) 'col) 14))))
+
+;; Width 9 aligned with width 14 requires an exact half-unit coordinate.
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'analog 'meter 'standard #:variant 'analog)
+               (lt:node 'horizontal 'meter 'standard
+                        #:variant 'segmented-horizontal)
+               (lt:align-center-x 'analog 'horizontal))))
+       (analog (resolved-node resolved 'analog))
+       (horizontal (resolved-node resolved 'horizontal)))
+  (check 'variant-center-remains-exact-rational
+         (and (= (field analog 'col) 7/2)
+              (= (field horizontal 'col) 1)
+              (exact? (field analog 'col))
+              (= (denominator (field analog 'col)) 2)
+              (= (+ (field analog 'col) 9/2)
+                 (+ (field horizontal 'col) 7))
+              (integer? (field analog 'rowSpan))
+              (integer? (field analog 'colSpan))
+              (integer? (field horizontal 'rowSpan))
+              (integer? (field horizontal 'colSpan)))))
+
 (display "topological-layout-test: PASS\n")
