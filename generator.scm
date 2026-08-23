@@ -1633,6 +1633,7 @@ var id var))
     #:role 'input-meter
 
     #:style 'segmented
+    #:orientation 'vertical
     #:scale-type 'db
     #:is-sharp #f
     #:glow-multiplier 0.6
@@ -1658,6 +1659,7 @@ var id var))
     #:role 'output-meter
 
     #:style 'segmented
+    #:orientation 'vertical
     #:scale-type 'db
     #:is-sharp #f
     #:glow-multiplier 0.6

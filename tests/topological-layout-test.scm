@@ -872,9 +872,6 @@
                (lt:group 'bad #:layout 'horizontal #:area 'Top 'a 'b)))
             (rejected?
              (lambda ()
-               (lt:group 'bad #:layout 'horizontal #:area '(top) 'a 'b)))
-            (rejected?
-             (lambda ()
                (lt:group 'bad #:layout 'horizontal #:area #f 'a 'b)))))
 
 (check 'area-requires-screen-dimensions
@@ -930,5 +927,176 @@
   (check 'area-translation-preserves-relative-distances
          (and (= (- (field b 'col) (field a 'col)) 4)
               (= (- (field b 'row) (field a 'row)) 0))))
+
+(define (solve-hierarchical-area path)
+  (lt:solve
+   (list (lt:node 'a 'toggle-button 'compact)
+         (lt:node 'b 'toggle-button 'compact)
+         (lt:group 'hierarchy #:layout 'vertical #:area path
+                   #:cohesion 'weak 'a 'b)
+         (lt:align-left 'a 'b)
+         (lt:align-top 'a 'b))
+   #:screen-rows 15 #:screen-cols 24))
+
+;; The aligned 4x3 pair reaches every recursive third and retains exact
+;; fractional coordinates; its forced soft-order violation is immaterial here.
+(let* ((resolved (solve-hierarchical-area '(top-right top-left)))
+       (group (resolved-node resolved 'hierarchy)))
+  (check 'hierarchical-top-right-top-left
+         (and (equal? (field group 'area) '(top-right top-left))
+              (= (field group 'col) 15)
+              (= (field group 'row) 1))))
+
+(let* ((resolved (solve-hierarchical-area '(top-right top-right)))
+       (group (resolved-node resolved 'hierarchy)))
+  (check 'hierarchical-top-right-top-right
+         (and (= (field group 'col) 61/3)
+              (= (field group 'row) 1)
+              (exact? (field group 'col))
+              (not (integer? (field group 'col))))))
+
+(let* ((resolved (solve-hierarchical-area '(top-right bottom-left)))
+       (group (resolved-node resolved 'hierarchy)))
+  (check 'hierarchical-top-right-bottom-left
+         (and (= (field group 'col) 15)
+              (= (field group 'row) 17/6))))
+
+(let* ((resolved (solve-hierarchical-area '(center center)))
+       (group (resolved-node resolved 'hierarchy)))
+  (check 'hierarchical-center-center
+         (and (= (field group 'col) 29/3)
+              (= (field group 'row) 37/6))))
+
+(let* ((resolved
+        (solve-hierarchical-area '(bottom-right top-left center)))
+       (group (resolved-node resolved 'hierarchy)))
+  (check 'hierarchical-three-level-path
+         (and (= (field group 'col) 143/9)
+              (= (field group 'row) 181/18)
+              (exact? (field group 'col))
+              (exact? (field group 'row)))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'toggle-button 'compact)
+               (lt:node 'b 'toggle-button 'compact)
+               (lt:group 'nested-horizontal #:layout 'horizontal
+                         #:area '(center center) 'a 'b))
+         #:screen-rows 15 #:screen-cols 24))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b)))
+  (check 'hierarchical-area-hard-horizontal
+         (= (- (field b 'col) (field a 'col)) 4)))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'text-button 'compact)
+               (lt:node 'b 'text-button 'compact)
+               (lt:group 'nested-vertical #:layout 'vertical
+                         #:area '(bottom top) 'a 'b))
+         #:screen-rows 15 #:screen-cols 24))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b)))
+  (check 'hierarchical-area-hard-vertical
+         (= (- (field b 'row) (field a 'row)) 2)))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'toggle-button 'compact)
+               (lt:node 'b 'toggle-button 'compact)
+               (lt:group 'nested-soft #:layout 'horizontal
+                         #:area '(top-right bottom-left)
+                         #:cohesion 'strong 'a 'b))
+         #:screen-rows 15 #:screen-cols 24))
+       (group (resolved-node resolved 'nested-soft)))
+  (check 'hierarchical-area-soft-cohesion
+         (and (soft-cost=? group 0 0)
+              (= (- (field (resolved-node resolved 'b) 'col)
+                    (field (resolved-node resolved 'a) 'col))
+                 4))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'meter 'compact
+                        #:variant 'segmented-horizontal)
+               (lt:node 'b 'meter 'compact
+                        #:variant 'segmented-horizontal)
+               (lt:group 'nested-variant #:layout 'horizontal
+                         #:area '(center center) #:cohesion 'weak 'a 'b))
+         #:screen-rows 15 #:screen-cols 24))
+       (group (resolved-node resolved 'nested-variant)))
+  (check 'hierarchical-area-variant-aware
+         (and (equal? (field group 'area) '(center center))
+              (eq? (field (resolved-node resolved 'a) 'variant)
+                   'segmented-horizontal))))
+
+(let ((resolved
+       (lt:solve
+        (list (lt:group 'nested-forward #:layout 'vertical
+                        #:area '(left bottom-right) 'a 'b)
+              (lt:node 'b 'text-button 'compact)
+              (lt:node 'a 'text-button 'compact))
+        #:screen-rows 15 #:screen-cols 24)))
+  (check 'hierarchical-area-forward-reference
+         (equal? (field (resolved-node resolved 'nested-forward) 'area)
+                 '(left bottom-right))))
+
+(check 'invalid-hierarchical-area-paths
+       (and (rejected?
+             (lambda ()
+               (lt:group 'bad #:layout 'horizontal #:area 'foo 'a 'b)))
+            (rejected?
+             (lambda ()
+               (lt:group 'bad #:layout 'horizontal
+                         #:area '(top-right foo) 'a 'b)))
+            (rejected?
+             (lambda ()
+               (lt:group 'bad #:layout 'horizontal #:area '() 'a 'b)))
+            (rejected?
+             (lambda ()
+               (lt:group 'bad #:layout 'horizontal
+                         #:area '(top-right 12) 'a 'b)))
+            (rejected?
+             (lambda ()
+               (lt:group 'bad #:layout 'horizontal
+                         #:area '(top-right . bottom-left) 'a 'b)))))
+
+(check 'anchor-incompatible-with-hierarchical-area
+       (rejected?
+        (lambda ()
+          (lt:solve
+           (list (lt:node 'a 'text-button 'compact #:col 1)
+                 (lt:node 'b 'text-button 'compact)
+                 (lt:group 'nested-anchor #:layout 'vertical
+                           #:area '(top-right top-right) 'a 'b))
+           #:screen-rows 15 #:screen-cols 24))))
+
+(check 'oversize-hierarchical-area-group
+       (rejected?
+        (lambda ()
+          (lt:solve
+           (list (lt:node 'a 'header 'extended)
+                 (lt:node 'b 'text-button 'compact)
+                 (lt:group 'nested-too-wide #:layout 'horizontal
+                           #:area '(center center) 'a 'b))
+           #:screen-rows 15 #:screen-cols 24))))
+
+(let* ((baseline
+        (lt:solve
+         (list (lt:node 'a 'toggle-button 'compact)
+               (lt:node 'b 'toggle-button 'compact)
+               (lt:group 'base #:layout 'vertical #:cohesion 'weak 'a 'b)
+               (lt:align-left 'a 'b)
+               (lt:align-top 'a 'b))))
+       (nested (solve-hierarchical-area '(bottom-right top-left center)))
+       (base-a (resolved-node baseline 'a))
+       (base-b (resolved-node baseline 'b))
+       (nested-a (resolved-node nested 'a))
+       (nested-b (resolved-node nested 'b)))
+  (check 'hierarchical-translation-preserves-distances
+         (and (= (- (field base-b 'row) (field base-a 'row))
+                 (- (field nested-b 'row) (field nested-a 'row)))
+              (= (- (field base-b 'col) (field base-a 'col))
+                 (- (field nested-b 'col) (field nested-a 'col))))))
 
 (display "topological-layout-test: PASS\n")

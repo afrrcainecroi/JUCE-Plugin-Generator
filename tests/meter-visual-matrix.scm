@@ -2,9 +2,8 @@
 ;; Generate from the Generator repository root with:
 ;;   guile -L . -l generator.scm -s tests/meter-visual-matrix.scm
 ;;
-;; The DSL has no meter orientation PROPERTY.  A segmented meter becomes
-;; vertical when height > width and horizontal otherwise.  The footprints
-;; below deliberately exercise that real renderer contract.
+;; Segmented orientation is explicit. The footprints remain the established
+;; vertical/horizontal geometry matrix and no longer select the runtime branch.
 
 (use-modules (oop goops)
              (generator-app code-generator))
@@ -64,7 +63,8 @@
          name row col 9)
         (make-meter
          (string-append "meterVertical" case-code profile-code)
-         properties (+ row 1) (+ col 2) row-span col-span)
+         (append properties '(#:orientation vertical))
+         (+ row 1) (+ col 2) row-span col-span)
         (loop (cdr profiles) (+ row row-span 2))))))
 
 (define (make-horizontal-case case-code caption row col properties)
@@ -82,7 +82,8 @@
          name specimen-row col 20)
         (make-meter
          (string-append "meterHorizontal" case-code profile-code)
-         properties (+ specimen-row 1) (+ col 1) row-span col-span)
+         (append properties '(#:orientation horizontal))
+         (+ specimen-row 1) (+ col 1) row-span col-span)
         (loop (cdr profiles) (+ specimen-row row-span 2))))))
 
 (define (make-analog-case case-code caption col properties)

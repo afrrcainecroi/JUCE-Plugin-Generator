@@ -111,6 +111,7 @@
                linear-slider:orientation
                <meter>
                meter:style
+               meter:orientation
                meter:scale-type
                meter:is-sharp
                meter:glow-multiplier
@@ -317,4 +318,3 @@
 ;;                reference
 ;;                reference))
 ;;       (else ""))))
-

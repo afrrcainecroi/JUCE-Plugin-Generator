@@ -159,6 +159,11 @@
     (error "Invalid meter style"
            (component:id m)
            (meter:style m)))
+  (unless (and (symbol? (meter:orientation m))
+               (memq (meter:orientation m) '(vertical horizontal)))
+    (error "Invalid meter orientation; expected one of (vertical horizontal)"
+           (component:id m)
+           (meter:orientation m)))
   (unless (memq (meter:scale-type m)
                 '(db linear vu))
     (error "Invalid meter scale-type; expected one of (db linear vu)"

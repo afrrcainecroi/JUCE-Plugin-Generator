@@ -103,6 +103,9 @@
 	   (
 	    ;; 'segmented oppure 'analog
 	    (style 'segmented)
+	    ;; Orientamento canonico del renderer segmented. Per analog è accettato
+	    ;; ma non modifica la variant metrica né la geometria.
+	    (orientation 'vertical)
 	    ;; proprietà grafiche del KineticMeter
 	    (scale-type 'db)
 	    (is-sharp #f)
@@ -551,6 +554,7 @@
   (append
    (next-method)
    `((style           . ,(meter:style m))
+     (orientation     . ,(meter:orientation m))
      (scale-type      . ,(meter:scale-type m))
      (is-sharp        . ,(meter:is-sharp m))
      (glow-multiplier . ,(meter:glow-multiplier m))

@@ -93,13 +93,22 @@
              id cohesion))
     (unless (or (not cohesion) (memq cohesion '(strong medium weak)))
       (error "Invalid topological layout group cohesion" id cohesion))
-    (unless (or (not area-seen?) (symbol? area))
-      (error "Topological layout group area must be a symbol" id area))
-    (unless (or (not area-seen?)
-                (memq area '(top-left top top-right
-                             left center right
-                             bottom-left bottom bottom-right)))
-      (error "Invalid topological layout group area" id area))
+    (when area-seen?
+      (unless (or (symbol? area)
+                  (and (list? area) (not (null? area))))
+        (error "Topological layout group area must be a symbol or non-empty proper path"
+               id area))
+      (let ((path (if (symbol? area) (list area) area)))
+        (unless (every symbol? path)
+          (error "Topological layout group area path must contain symbols"
+                 id area))
+        (unless (every
+                 (lambda (item)
+                   (memq item '(top-left top top-right
+                                left center right
+                                bottom-left bottom bottom-right)))
+                 path)
+          (error "Invalid topological layout group area path" id area))))
     (unless (>= (length members) 2)
       (error "Topological layout group requires at least two members"
              id members))
@@ -414,6 +423,23 @@
     ((bottom-right) 2)
     (else (error "Unknown topological screen area" area))))
 
+(define (area-path area)
+  (if (symbol? area) (list area) area))
+
+(define (select-area-third bounds area axis)
+  (let* ((lower (car bounds))
+         (upper (cdr bounds))
+         (third (/ (- upper lower) 3))
+         (index (area-axis-index area axis)))
+    (cons (+ lower (* index third))
+          (+ lower (* (+ index 1) third)))))
+
+(define (resolve-area-path screen-size area axis)
+  (fold (lambda (item bounds)
+          (select-area-third bounds item axis))
+        (cons 1 (+ screen-size 1))
+        (area-path area)))
+
 ;; Groups remain derived IR objects, never graph vertices. For each hard-valid
 ;; candidate, member offsets are frozen relative to the first member and the
 ;; reference is bounded so that the derived group center lies in its third.
@@ -439,11 +465,10 @@
                   (start (apply min positions))
                   (end (apply max ends))
                   (span (- end start))
-                  (third (/ screen-size 3))
-                  (index (area-axis-index area axis))
                   (center-offset (+ (- start reference-position) (/ span 2)))
-                  (center-lower (+ 1 (* index third)))
-                  (center-upper (+ 1 (* (+ index 1) third)))
+                  (area-bounds (resolve-area-path screen-size area axis))
+                  (center-lower (car area-bounds))
+                  (center-upper (cdr area-bounds))
                   (rigid-edges
                    (append-map
                     (lambda (id)

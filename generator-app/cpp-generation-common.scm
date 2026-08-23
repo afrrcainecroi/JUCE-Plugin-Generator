@@ -133,6 +133,7 @@
 (define (meter-properties->cpp model)
   (let ((var             (assoc-ref model 'var))
         (style           (assoc-ref model 'style))
+        (orientation     (assoc-ref model 'orientation))
         (scale-type      (assoc-ref model 'scale-type))
         (is-sharp        (assoc-ref model 'is-sharp))
         (glow-multiplier (assoc-ref model 'glow-multiplier))
@@ -152,6 +153,11 @@
              var
              (cpp-string
               (symbol->string scale-type)))
+     (format #f
+             "~a.properties.set(\"orientation\", \"~a\");~%"
+             var
+             (cpp-string
+              (symbol->string orientation)))
      (if is-sharp
          (format #f
                  "~a.properties.set(\"isSharp\", true);~%"
