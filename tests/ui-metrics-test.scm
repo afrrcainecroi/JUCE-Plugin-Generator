@@ -594,6 +594,105 @@
                     'palette-selector #f '(palette-callback)
                     'preferred-profile)))))
 
+(let* ((metrics (ui-metrics 'meter))
+       (technical-min (field metrics 'technical-min))
+       (variants (field metrics 'variants))
+       (vertical (field variants 'segmented-vertical))
+       (horizontal (field variants 'segmented-horizontal))
+       (analog (field variants 'analog))
+       (content-dependent (field metrics 'content-dependent))
+       (scale-type (field content-dependent 'scale-type)))
+  (check 'meter-present metrics)
+  (check 'meter-technical-min-not-normative
+         (and (not (field technical-min 'normative?))
+              (eq? (field technical-min 'status) 'to-be-derived)
+              (not (field technical-min 'width))
+              (not (field technical-min 'height))))
+  (check 'meter-profiles
+         (and
+          (equal? (ui-profile 'meter 'segmented-vertical 'compact)
+                  '((width . 3) (height . 10)))
+          (equal? (ui-profile 'meter 'segmented-vertical 'standard)
+                  '((width . 4) (height . 14)))
+          (equal? (ui-profile 'meter 'segmented-vertical 'extended)
+                  '((width . 5) (height . 18)))
+          (equal? (ui-profile 'meter 'segmented-horizontal 'compact)
+                  '((width . 10) (height . 3)))
+          (equal? (ui-profile 'meter 'segmented-horizontal 'standard)
+                  '((width . 14) (height . 4)))
+          (equal? (ui-profile 'meter 'segmented-horizontal 'extended)
+                  '((width . 18) (height . 5)))
+          (equal? (ui-profile 'meter 'analog 'compact)
+                  '((width . 6) (height . 5)))
+          (equal? (ui-profile 'meter 'analog 'standard)
+                  '((width . 9) (height . 7)))
+          (equal? (ui-profile 'meter 'analog 'extended)
+                  '((width . 12) (height . 9)))))
+  (check 'meter-base-contracts
+         (every
+          (lambda (variant)
+            (and (eq? (field variant 'visual-min-profile) 'compact)
+                 (eq? (field variant 'preferred-profile) 'standard)
+                 (eq? (field variant 'useful-max-profile) 'extended)))
+          (list vertical horizontal analog)))
+  (check 'meter-natural-geometries
+         (and (equal? (field vertical 'natural-geometry)
+                      '((form . segmented-meter) (orientation . vertical)))
+              (equal? (field horizontal 'natural-geometry)
+                      '((form . segmented-meter) (orientation . horizontal)))
+              (equal? (field analog 'natural-geometry)
+                      '((form . analog-meter) (orientation . radial)))))
+  (check 'meter-capabilities
+         (and (equal? (field vertical 'capabilities)
+                      '(scale-type scale-labels num-segments level enabled))
+              (equal? (field horizontal 'capabilities)
+                      '(scale-type scale-labels num-segments level enabled))
+              (equal? (field analog 'capabilities)
+                      '(scale-type scale-labels needle sharp level))
+              (not (any (lambda (variant)
+                          (memq 'peak-marker (field variant 'capabilities)))
+                        (list vertical horizontal analog)))))
+  (check 'meter-scale-type-metadata
+         (and (equal? (field scale-type 'canonical-values) '(db linear vu))
+              (eq? (field scale-type 'footprint-effect)
+                   'content-dependent-label-density)
+              (eq? (field scale-type 'structural-geometry-effect) 'none)
+              (equal? (field (field (field scale-type 'value-advisory) 'vu)
+                                    'preferred-profile)
+                      'extended)))
+  (check 'meter-scale-label-rules
+         (and (eq? (ui-capability-profile
+                    'meter 'segmented-vertical '(scale-labels)
+                    'minimum-visual-profile)
+                   'standard)
+              (eq? (ui-capability-profile
+                    'meter 'segmented-horizontal '(scale-labels)
+                    'preferred-profile)
+                   'standard)
+              (eq? (ui-capability-profile
+                    'meter 'analog '(scale-labels) 'preferred-profile)
+                   'standard)))
+  (check 'meter-nongeometric-capabilities
+         (every
+          (lambda (variant+capability)
+            (let ((variant (car variant+capability))
+                  (capability (cdr variant+capability)))
+              (and (eq? (field (field content-dependent capability)
+                               'footprint-effect)
+                        'none)
+                   (not (ui-capability-profile
+                         'meter variant (list capability)
+                         'preferred-profile))
+                   (not (ui-capability-profile
+                         'meter variant (list capability)
+                         'minimum-visual-profile)))))
+          '((segmented-vertical . num-segments)
+            (segmented-horizontal . num-segments)
+            (segmented-vertical . level)
+            (segmented-horizontal . level)
+            (analog . level)
+            (analog . sharp)))))
+
 ;; Every TYPE registered before link retains its profile API.
 (check 'all-existing-types-backward-compatible
        (and (equal? (ui-profile 'rotary-slider 'compact)
@@ -615,6 +714,12 @@
             (equal? (ui-profile 'footer 'standard)
                     '((width . 24) (height . 3)))
             (equal? (ui-profile 'link 'standard)
+                    '((width . 12) (height . 2)))
+            (equal? (ui-profile 'bypass-switch 'standard)
+                    '((width . 7) (height . 4)))
+            (equal? (ui-profile 'selector 'standard)
+                    '((width . 12) (height . 2)))
+            (equal? (ui-profile 'palette-selector 'standard)
                     '((width . 12) (height . 2)))))
 
 ;; Recheck both pre-existing profile APIs after registering new TYPEs.

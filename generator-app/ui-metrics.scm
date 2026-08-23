@@ -629,3 +629,83 @@
          . ((capabilities-all . (items))
             (text-length-class . long)))
         (preferred-profile . extended))))))
+
+(register-ui-metrics!
+ 'meter
+ '((technical-min
+    . ((normative? . #f)
+       (status . to-be-derived)
+       (width . #f)
+       (height . #f)))
+   (variants
+    . ((segmented-vertical
+        . ((visual-min . ((width . 3) (height . 10)))
+           (preferred . ((width . 4) (height . 14)))
+           (useful-max . ((width . 5) (height . 18)))
+           (visual-min-profile . compact)
+           (preferred-profile . standard)
+           (useful-max-profile . extended)
+           (profiles
+            . ((compact . ((width . 3) (height . 10)))
+               (standard . ((width . 4) (height . 14)))
+               (extended . ((width . 5) (height . 18)))))
+           (natural-geometry
+            . ((form . segmented-meter) (orientation . vertical)))
+           (capabilities
+            . (scale-type scale-labels num-segments level enabled))))
+       (segmented-horizontal
+        . ((visual-min . ((width . 10) (height . 3)))
+           (preferred . ((width . 14) (height . 4)))
+           (useful-max . ((width . 18) (height . 5)))
+           (visual-min-profile . compact)
+           (preferred-profile . standard)
+           (useful-max-profile . extended)
+           (profiles
+            . ((compact . ((width . 10) (height . 3)))
+               (standard . ((width . 14) (height . 4)))
+               (extended . ((width . 18) (height . 5)))))
+           (natural-geometry
+            . ((form . segmented-meter) (orientation . horizontal)))
+           (capabilities
+            . (scale-type scale-labels num-segments level enabled))))
+       (analog
+        . ((visual-min . ((width . 6) (height . 5)))
+           (preferred . ((width . 9) (height . 7)))
+           (useful-max . ((width . 12) (height . 9)))
+           (visual-min-profile . compact)
+           (preferred-profile . standard)
+           (useful-max-profile . extended)
+           (profiles
+            . ((compact . ((width . 6) (height . 5)))
+               (standard . ((width . 9) (height . 7)))
+               (extended . ((width . 12) (height . 9)))))
+           (natural-geometry
+            . ((form . analog-meter) (orientation . radial)))
+           (capabilities . (scale-type scale-labels needle sharp level))))))
+   (content-dependent
+    . ((scale-type
+        . ((canonical-values . (db linear vu))
+           (footprint-effect . content-dependent-label-density)
+           (structural-geometry-effect . none)
+           (value-advisory
+            . ((vu
+                . ((variant . segmented-horizontal)
+                   (preferred-profile . extended)))))))
+       (num-segments . ((footprint-effect . none)))
+       (level . ((footprint-effect . none)))
+       (enabled . ((footprint-effect . none)))
+       (sharp . ((footprint-effect . none)))))
+   ;; Rules are advisory metadata and are not consumed by layout.
+   (capability-rules
+    . (((when
+         . ((variant . segmented-vertical)
+            (capabilities-all . (scale-labels))))
+        (minimum-visual-profile . standard))
+       ((when
+         . ((variant . segmented-horizontal)
+            (capabilities-all . (scale-labels))))
+        (preferred-profile . standard))
+       ((when
+         . ((variant . analog)
+            (capabilities-all . (scale-labels))))
+        (preferred-profile . standard))))))
