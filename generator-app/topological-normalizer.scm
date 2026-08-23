@@ -30,6 +30,7 @@
     ((header) 'header)
     ((footer) 'footer)
     ((link) 'link)
+    ((palette-label) 'palette-label)
     ((selector) 'selector)
     ((palette-selector) 'palette-selector)
     ((meter) 'meter)
