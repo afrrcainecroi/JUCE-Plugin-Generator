@@ -113,7 +113,9 @@
 ;; Declarations are separate from the graphical DSL.  Their member IDs may
 ;; refer forward to components independently of registration order.
 (define declarations
-  (list (lt:align-top 'future-a 'future-b)
+  (list (lt:constrain 'future-b (lt:next-right-of 'future-a))
+        (lt:constrain 'palette-title (lt:right-of 'meter-h))
+        (lt:align-top 'future-a 'future-b)
         (lt:group 'shadow-group
                   #:layout 'horizontal
                   #:cohesion 'strong
@@ -133,6 +135,11 @@
             (equal? (field resolved-group 'area)
                     '(top-right bottom-left))
             (eq? (field resolved-group 'cohesion) 'strong)))
+(check 'shadow-positional-bridge
+       (let ((meter-h (entry-by-id declared-resolved 'meter-h))
+             (palette (entry-by-id declared-resolved 'palette-title)))
+         (>= (field palette 'col)
+             (+ (field meter-h 'col) (field meter-h 'colSpan)))))
 (check 'declared-shadow-does-not-change-legacy-output
        (equal? baseline (legacy-output-snapshot)))
 

@@ -182,4 +182,111 @@
                      'area)
               'top-right)))
 
+;; Experimental positional bridge: declarations are consumed by the
+;; normalizer and attached to the target lt:node before solving.
+(let* ((a (make <text-button> #:id 'bridge-a))
+       (b (make <text-button> #:id 'bridge-b))
+       (c (make <text-button> #:id 'bridge-c))
+       (d (make <text-button> #:id 'bridge-d))
+       (e (make <text-button> #:id 'bridge-e))
+       (meter (make <meter> #:id 'bridge-meter #:style 'analog))
+       (declarations
+        (list
+         ;; Forward references and multiple declarations for one target are
+         ;; concatenated in declaration order.
+         (lt:constrain 'bridge-b (lt:next-right-of 'bridge-a))
+         (lt:constrain 'bridge-b (lt:below 'bridge-e))
+         (lt:constrain 'bridge-c
+                       (lt:right-of 'bridge-b)
+                       (lt:below 'bridge-a))
+         (lt:constrain 'bridge-d (lt:next-below 'bridge-a))
+         (lt:constrain 'bridge-e (lt:above 'bridge-a))
+         (lt:constrain 'bridge-meter (lt:left-of 'bridge-c))
+         (lt:align-top 'bridge-a 'bridge-b)
+         (lt:group 'bridge-pair #:layout 'horizontal
+                   #:cohesion 'strong
+                   #:area '(top-right bottom-left)
+                   'bridge-a 'bridge-b)))
+       (normalized
+        (normalize-topological-layout
+         (list meter e d c b a) declarations #:grid grid))
+       (entries (field normalized 'entries))
+       (node-b (entry-by-id entries 'bridge-b))
+       (resolved (solve-normalized-topological-layout normalized))
+       (ra (entry-by-id resolved 'bridge-a))
+       (rb (entry-by-id resolved 'bridge-b))
+       (rc (entry-by-id resolved 'bridge-c))
+       (rd (entry-by-id resolved 'bridge-d))
+       (re (entry-by-id resolved 'bridge-e))
+       (rm (entry-by-id resolved 'bridge-meter)))
+  (check 'node-constraints-declarations-consumed
+         (and (= (length (field node-b 'constraints)) 2)
+              (not (find (lambda (entry)
+                           (eq? (field entry 'kind) 'node-constraints))
+                         entries))))
+  (check 'next-right-of-via-declaration
+         (= (field rb 'col) (+ (field ra 'col) (field ra 'colSpan))))
+  (check 'right-of-and-below-via-declaration
+         (and (>= (field rc 'col)
+                  (+ (field rb 'col) (field rb 'colSpan)))
+              (>= (field rc 'row)
+                  (+ (field ra 'row) (field ra 'rowSpan)))))
+  (check 'next-below-via-declaration
+         (= (field rd 'row) (+ (field ra 'row) (field ra 'rowSpan))))
+  (check 'above-via-declaration
+         (<= (+ (field re 'row) (field re 'rowSpan)) (field ra 'row)))
+  (check 'variant-aware-node-constraint
+         (and (eq? (field rm 'variant) 'analog)
+              (<= (+ (field rm 'col) (field rm 'colSpan))
+                  (field rc 'col)))))
+
+;; Direct semantic equivalence with a manually constrained lt:node.
+(let* ((manual
+        (lt:solve
+         (list (lt:node 'equiv-a 'text-button 'standard #:row 2 #:col 3)
+               (lt:node 'equiv-b 'text-button 'standard
+                        #:constraints (list (lt:next-right-of 'equiv-a))))))
+       (a (make <text-button> #:id 'equiv-a #:row 2 #:col 3))
+       (b (make <text-button> #:id 'equiv-b))
+       (normalized
+        (normalize-topological-layout
+         (list a b)
+         (list (lt:constrain 'equiv-b (lt:next-right-of 'equiv-a)))
+         #:grid grid))
+       (adapted (solve-normalized-topological-layout normalized)))
+  (check 'manual-node-declaration-equivalence
+         (every
+          (lambda (id)
+            (let ((left (entry-by-id manual id))
+                  (right (entry-by-id adapted id)))
+              (every (lambda (key) (= (field left key) (field right key)))
+                     '(row col rowSpan colSpan))))
+          '(equiv-a equiv-b))))
+
+(check 'node-constraints-missing-target-rejected
+       (rejected?
+        (lambda ()
+          (normalize-topological-layout
+           (list (make <text-button> #:id 'only-node))
+           (list (lt:constrain 'missing (lt:right-of 'only-node)))
+           #:grid grid))))
+(check 'node-constraints-zero-rejected
+       (rejected? (lambda () (lt:constrain 'only-node))))
+(check 'node-constraints-non-symbol-target-rejected
+       (rejected?
+        (lambda () (lt:constrain "only-node" (lt:right-of 'other)))))
+(check 'node-constraints-non-positional-rejected
+       (rejected?
+        (lambda ()
+          (lt:constrain 'only-node (lt:align-left 'only-node 'other)))))
+(check 'node-constraints-malformed-rejected
+       (rejected?
+        (lambda ()
+          (normalize-topological-layout
+           (list (make <text-button> #:id 'malformed-node))
+           (list '((kind . node-constraints)
+                   (node . malformed-node)
+                   (constraints . (((relation . right-of))))))
+           #:grid grid))))
+
 (display "topological-normalizer-test: PASS\n")

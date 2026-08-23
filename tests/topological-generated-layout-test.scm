@@ -6,7 +6,8 @@
              (generator-app code-generator)
              (generator-app generation-state)
              (generator-app generation-orchestration)
-             (generator-app topological-layout))
+             (generator-app topological-layout)
+             (generator-app topological-normalizer))
 
 (define (check label predicate)
   (unless predicate
@@ -68,6 +69,10 @@
 
 (define declarations
   (list
+   ;; Explicit positional bridge declarations: these are not supplied by a
+   ;; group or anchor.
+   (lt:constrain 'future-b (lt:next-right-of 'future-a))
+   (lt:constrain 'palette-title (lt:right-of 'meter-h))
    (lt:align-center-x 'even 'odd)
    (lt:align-top 'future-a 'future-b)
    (lt:group 'hierarchical-group
@@ -125,6 +130,11 @@
               (= (field b 'col) (+ (field a 'col) (field a 'colSpan)))
               (equal? (field group 'area) '(top-right bottom-left))
               (eq? (field group 'cohesion) 'strong))))
+(check 'explicit-positional-declarations-applied
+       (let ((meter (entry-by-id original 'meter-h))
+             (palette (entry-by-id original 'palette-title)))
+         (>= (field palette 'col)
+             (+ (field meter 'col) (field meter 'colSpan)))))
 
 (define legacy-code (generate-grid-code))
 (define selected-legacy-code

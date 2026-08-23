@@ -5,7 +5,8 @@
   #:use-module (generator-app layout)
   #:use-module (generator-app ui-metrics)
   #:use-module (generator-app topological-layout)
-  #:export (dsl-component->metric-type
+  #:export (lt:constrain
+            dsl-component->metric-type
             dsl-model->metric-type
             normalize-topological-component
             normalize-topological-model
@@ -20,6 +21,32 @@
 (define (field alist key)
   (let ((entry (assoc key alist)))
     (and entry (cdr entry))))
+
+(define positional-relations
+  '(next-right-of next-left-of next-above next-below
+    right-of left-of above below))
+
+(define (positional-constraint? constraint)
+  (and (list? constraint)
+       (= (length constraint) 2)
+       (equal? (map car constraint) '(relation reference))
+       (memq (field constraint 'relation) positional-relations)
+       (symbol? (field constraint 'reference))))
+
+;; Experimental global adapter declaration.  It is consumed by this module
+;; and never reaches lt:solve as a new IR kind.
+(define (lt:constrain target . constraints)
+  (unless (symbol? target)
+    (error "Topological node-constraints target must be a symbol" target))
+  (when (null? constraints)
+    (error "Topological node-constraints declaration requires constraints"
+           target))
+  (unless (every positional-constraint? constraints)
+    (error "Topological node-constraints declaration accepts only positional constraints"
+           target constraints))
+  `((kind . node-constraints)
+    (node . ,target)
+    (constraints . ,constraints)))
 
 (define (metric-type-for-dsl-type type)
   (case type
@@ -156,8 +183,49 @@
            (metric-row-span . ,metric-row-span)
            (metric-col-span . ,metric-col-span)))))
 
+(define (valid-node-constraints-declaration? declaration)
+  (let ((constraints (field declaration 'constraints)))
+    (and (symbol? (field declaration 'node))
+         (list? constraints)
+         (not (null? constraints))
+         (every positional-constraint? constraints))))
+
 (define (valid-topology-declaration? declaration)
-  (memq (field declaration 'kind) '(alignment group)))
+  (case (field declaration 'kind)
+    ((alignment group) #t)
+    ((node-constraints) (valid-node-constraints-declaration? declaration))
+    (else #f)))
+
+(define (replace-node-constraints node constraints)
+  (map (lambda (entry)
+         (if (eq? (car entry) 'constraints)
+             (cons 'constraints constraints)
+             entry))
+       node))
+
+(define (attach-node-constraints nodes declarations)
+  (let ((node-ids (map (lambda (node) (field node 'id)) nodes)))
+    (for-each
+     (lambda (declaration)
+       (unless (memq (field declaration 'node) node-ids)
+         (error "Topological node-constraints target does not exist"
+                (field declaration 'node))))
+     declarations)
+    (map
+     (lambda (node)
+       (let* ((id (field node 'id))
+              (matching
+               (filter (lambda (declaration)
+                         (eq? (field declaration 'node) id))
+                       declarations))
+              (constraints
+               (append-map (lambda (declaration)
+                             (field declaration 'constraints))
+                           matching)))
+         (replace-node-constraints
+          node
+          (append (field node 'constraints) constraints))))
+     nodes)))
 
 (define* (normalize-topological-model-layout models topology-declarations
                                               #:key grid-model)
@@ -170,13 +238,23 @@
   (unless (every valid-topology-declaration? topology-declarations)
     (error "Unsupported separate topological declaration"
            topology-declarations))
-  (let* ((nodes (map normalize-topological-model models))
+  (let* ((raw-nodes (map normalize-topological-model models))
+         (node-constraint-declarations
+          (filter (lambda (declaration)
+                    (eq? (field declaration 'kind) 'node-constraints))
+                  topology-declarations))
+         (global-declarations
+          (filter (lambda (declaration)
+                    (memq (field declaration 'kind) '(alignment group)))
+                  topology-declarations))
+         (nodes (attach-node-constraints
+                 raw-nodes node-constraint-declarations))
          (warnings
           (filter-map legacy-span-warning models nodes)))
     `((screen-rows . ,(field grid-model 'rows))
       (screen-cols . ,(field grid-model 'cols))
       (warnings . ,warnings)
-      (entries . ,(append nodes topology-declarations)))))
+      (entries . ,(append nodes global-declarations)))))
 
 (define* (normalize-topological-layout components topology-declarations
                                         #:key grid)
