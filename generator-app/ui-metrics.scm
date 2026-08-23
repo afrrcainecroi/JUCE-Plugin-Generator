@@ -391,6 +391,69 @@
         (preferred-profile . standard))))))
 
 (register-ui-metrics!
+ 'palette-label
+ '((technical-min
+    . ((normative? . #f)
+       (status . to-be-derived)
+       (width . #f)
+       (height . #f)))
+   ;; palette-label is a concrete juce::Label with the same renderer and font
+   ;; geometry as label. Palette composition metadata adds no decoration.
+   (visual-min . ((width . 8) (height . 2)))
+   (preferred . ((width . 12) (height . 3)))
+   (useful-max . ((width . 16) (height . 4)))
+   (visual-min-profile . compact)
+   (preferred-profile . standard)
+   (useful-max-profile . extended)
+   (profiles
+    . ((compact . ((width . 8) (height . 2)))
+       (standard . ((width . 12) (height . 3)))
+       (extended . ((width . 16) (height . 4)))))
+   (natural-geometry
+    . ((form . horizontal-text-label)
+       (lines . single)))
+   (capabilities
+    . (text font-size font-style text-colour minimum-horizontal-scale
+            justification tooltip enable default-theme))
+   (content-dependent
+    . ((text-length
+        . ((effect . preferred-profile)
+           (classification . descriptive-advisory)))
+       (font-size
+        . ((effect . preferred-profile)
+           (classification . descriptive-advisory)))
+       (minimum-horizontal-scale
+        . ((effect . fitted-text-compression)
+           (classification . renderer-configured)))
+       (font-style
+        . ((footprint-effect . not-significant-in-current-matrix)))
+       (justification
+        . ((footprint-effect . none)
+           (minimum-footprint-effect . none)))
+       (text-colour . ((footprint-effect . none)))
+       (tooltip . ((footprint-effect . none)))
+       (enable
+        . ((footprint-effect . none)
+           (classification . palette-composition-metadata)))
+       (default-theme
+        . ((footprint-effect . none)
+           (classification . palette-selection-metadata)))))
+   (capability-rules
+    . (((when
+         . ((capabilities-all . (text font-size))
+            (text-length-class . long)
+            (font-size-class . large)))
+        (preferred-profile . extended))
+       ((when
+         . ((capabilities-all . (text))
+            (text-length-class . long)))
+        (preferred-profile . extended))
+       ((when
+         . ((capabilities-all . (font-size))
+            (font-size-class . large)))
+        (preferred-profile . standard))))))
+
+(register-ui-metrics!
  'header
  '((technical-min
     . ((normative? . #f)

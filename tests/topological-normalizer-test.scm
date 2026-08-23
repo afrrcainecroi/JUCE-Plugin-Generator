@@ -39,6 +39,27 @@
             (eq? (dsl-component->metric-type toggle) 'toggle-button)
             (eq? (dsl-component->metric-type bypass) 'bypass-switch)))
 
+(let* ((component
+        (make <palette-label> #:id 'palette-title #:text "Theme"
+              #:row 2 #:col 3 #:row-span 1 #:col-span 2
+              #:enable #t #:default-theme 3))
+       (normalized
+        (normalize-topological-layout (list component) '() #:grid grid))
+       (node (entry-by-id (field normalized 'entries) 'palette-title))
+       (resolved
+        (entry-by-id (solve-normalized-topological-layout normalized)
+                     'palette-title)))
+  (check 'palette-label-dedicated-metric-type
+         (and (eq? (dsl-component->metric-type component) 'palette-label)
+              (eq? (field node 'type) 'palette-label)
+              (eq? (field node 'profile) 'standard)
+              (not (field node 'variant))))
+  (check 'palette-label-normalize-and-solve
+         (and (= (field resolved 'row) 2)
+              (= (field resolved 'col) 3)
+              (= (field resolved 'rowSpan) 3)
+              (= (field resolved 'colSpan) 12))))
+
 (let* ((normalized
         (normalize-topological-layout
          (list scope rotary toggle bypass) '() #:grid grid))

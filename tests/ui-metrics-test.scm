@@ -333,6 +333,57 @@
                'label #f '(font-style) 'preferred-profile
                '((font-style . bold))))))
 
+(let* ((metrics (ui-metrics 'palette-label))
+       (technical-min (field metrics 'technical-min))
+       (geometry (field metrics 'natural-geometry))
+       (content (field metrics 'content-dependent)))
+  (check 'palette-label-present metrics)
+  (check 'palette-label-technical-min-not-normative
+         (and (not (field technical-min 'normative?))
+              (eq? (field technical-min 'status) 'to-be-derived)
+              (not (field technical-min 'width))
+              (not (field technical-min 'height))))
+  (check 'palette-label-profiles-match-observed-label-geometry
+         (and (equal? (ui-profile 'palette-label 'compact)
+                      '((width . 8) (height . 2)))
+              (equal? (ui-profile 'palette-label 'standard)
+                      '((width . 12) (height . 3)))
+              (equal? (ui-profile 'palette-label 'extended)
+                      '((width . 16) (height . 4)))
+              (eq? (field metrics 'visual-min-profile) 'compact)
+              (eq? (field metrics 'preferred-profile) 'standard)
+              (eq? (field metrics 'useful-max-profile) 'extended)))
+  (check 'palette-label-natural-geometry
+         (and (eq? (field geometry 'form) 'horizontal-text-label)
+              (eq? (field geometry 'lines) 'single)))
+  (check 'palette-label-capabilities
+         (equal? (field metrics 'capabilities)
+                 '(text font-size font-style text-colour
+                   minimum-horizontal-scale justification tooltip
+                   enable default-theme)))
+  (check 'palette-metadata-does-not-change-footprint
+         (and (eq? (field (field content 'enable) 'footprint-effect) 'none)
+              (eq? (field (field content 'default-theme) 'footprint-effect)
+                   'none)
+              (not (ui-capability-profile
+                    'palette-label #f '(enable) 'preferred-profile
+                    '((enable . #f))))
+              (not (ui-capability-profile
+                    'palette-label #f '(default-theme) 'preferred-profile
+                    '((default-theme . 18))))))
+  (check 'palette-label-content-rules
+         (and (eq? (ui-capability-profile
+                    'palette-label #f '(text) 'preferred-profile
+                    '((text-length-class . long)))
+                   'extended)
+              (eq? (ui-capability-profile
+                    'palette-label #f '(font-size) 'preferred-profile
+                    '((font-size-class . large)))
+                   'standard)
+              (not (ui-capability-profile
+                    'palette-label #f '(justification) 'preferred-profile
+                    '((justification . right)))))))
+
 (define (check-banner-contract type expected-capabilities expected-form)
   (let* ((metrics (ui-metrics type))
          (technical-min (field metrics 'technical-min))
