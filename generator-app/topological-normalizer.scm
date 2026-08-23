@@ -6,8 +6,11 @@
   #:use-module (generator-app ui-metrics)
   #:use-module (generator-app topological-layout)
   #:export (dsl-component->metric-type
+            dsl-model->metric-type
             normalize-topological-component
+            normalize-topological-model
             normalize-topological-layout
+            normalize-topological-model-layout
             solve-normalized-topological-layout))
 
 ;; This module is the only adapter between concrete DSL objects and the
@@ -18,8 +21,8 @@
   (let ((entry (assoc key alist)))
     (and entry (cdr entry))))
 
-(define (dsl-component->metric-type component)
-  (case (component-type component)
+(define (metric-type-for-dsl-type type)
+  (case type
     ((rotary-slider) 'rotary-slider)
     ((linear-slider) 'linear-slider)
     ((text-button) 'text-button)
@@ -37,7 +40,16 @@
     ((scope) 'scope)
     (else
      (error "DSL component has no supported metric TYPE mapping"
-            (component-type component)))))
+            type))))
+
+(define (dsl-component->metric-type component)
+  (metric-type-for-dsl-type (component-type component)))
+
+;; Registered generation models retain the semantic DSL TYPE.  Keeping this
+;; entry point here lets the shadow pipeline reuse the exact same explicit
+;; mapping without teaching the solver about DSL model representation.
+(define (dsl-model->metric-type model)
+  (metric-type-for-dsl-type (field model 'type)))
 
 (define (normalize-logical-id id)
   (cond
@@ -106,10 +118,9 @@
                    metric-type variant))
           (caar matches)))))
 
-(define (normalize-topological-component component)
-  (let* ((model (component->model component))
-         (id (normalize-logical-id (field model 'id)))
-         (metric-type (dsl-component->metric-type component))
+(define (normalize-topological-model model)
+  (let* ((id (normalize-logical-id (field model 'id)))
+         (metric-type (dsl-model->metric-type model))
          (variant (component-metric-variant model metric-type))
          (profile (preferred-metric-profile metric-type variant))
          (row (field model 'row))
@@ -121,9 +132,11 @@
              #:row row
              #:col col)))
 
-(define (legacy-span-warning component node)
-  (let* ((model (component->model component))
-         (id (field node 'id))
+(define (normalize-topological-component component)
+  (normalize-topological-model (component->model component)))
+
+(define (legacy-span-warning model node)
+  (let* ((id (normalize-logical-id (field model 'id)))
          (type (field node 'type))
          (variant (field node 'variant))
          (profile (field node 'profile))
@@ -146,24 +159,36 @@
 (define (valid-topology-declaration? declaration)
   (memq (field declaration 'kind) '(alignment group)))
 
+(define* (normalize-topological-model-layout models topology-declarations
+                                              #:key grid-model)
+  (unless (list? models)
+    (error "DSL component models for topological normalization must be a list"))
+  (unless (list? topology-declarations)
+    (error "Topological declarations must be a list"))
+  (unless grid-model
+    (error "Topological normalization requires an explicit DSL grid model"))
+  (unless (every valid-topology-declaration? topology-declarations)
+    (error "Unsupported separate topological declaration"
+           topology-declarations))
+  (let* ((nodes (map normalize-topological-model models))
+         (warnings
+          (filter-map legacy-span-warning models nodes)))
+    `((screen-rows . ,(field grid-model 'rows))
+      (screen-cols . ,(field grid-model 'cols))
+      (warnings . ,warnings)
+      (entries . ,(append nodes topology-declarations)))))
+
 (define* (normalize-topological-layout components topology-declarations
                                         #:key grid)
   (unless (list? components)
     (error "DSL components for topological normalization must be a list"))
-  (unless (list? topology-declarations)
-    (error "Topological declarations must be a list"))
   (unless grid
     (error "Topological normalization requires an explicit DSL <grid>"))
-  (unless (every valid-topology-declaration? topology-declarations)
-    (error "Unsupported separate topological declaration"
-           topology-declarations))
-  (let* ((nodes (map normalize-topological-component components))
-         (warnings
-          (filter-map legacy-span-warning components nodes)))
-    `((screen-rows . ,(grid:rows grid))
-      (screen-cols . ,(grid:cols grid))
-      (warnings . ,warnings)
-      (entries . ,(append nodes topology-declarations)))))
+  (normalize-topological-model-layout
+   (map component->model components)
+   topology-declarations
+   #:grid-model `((rows . ,(grid:rows grid))
+                  (cols . ,(grid:cols grid)))))
 
 (define (solve-normalized-topological-layout normalized)
   (let ((rows (field normalized 'screen-rows))

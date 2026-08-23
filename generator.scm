@@ -92,12 +92,14 @@
  (generator-app genera-classi)
  (generator-app code-generator)
  (generator-app generation-state)
+ (generator-app generation-orchestration)
  )
 
 ;;
 ;;Per generare i codici C++
 (define-public oversampling-filters '(filterHalfBandPolyphaseIIR filterHalfBandFIREquiripple))
-(define* (GenerateC++ g::gen-var dst-folder new-name interface-definitions aggiornamento)
+(define* (GenerateC++ g::gen-var dst-folder new-name interface-definitions aggiornamento
+                      #:key (topology-declarations '()))
   ;;Inizializza i risultati
   (InitializeConstants)
     ;; Nuovo sistema identificatori DSL -> C++
@@ -109,6 +111,10 @@
   ;; (set! *OVERSAMPLING-isMaxQuality* #f)
   ;; (set! *OVERSAMPLING-useIntegerLatency* #t)
   (interface-definitions dst-folder new-name)
+
+  ;; Shadow-only logical layout: deliberately discard the diagnostic result.
+  ;; Tests and tooling can call run-generation-topological-shadow directly.
+  (run-generation-topological-shadow topology-declarations)
 
   ;; Materializza le RESOURCE dichiarate dalla DSL.
   (materialize-image-sets! dst-folder)
@@ -1898,6 +1904,11 @@ var id var))
 
      ;; Wrapper degli emitter
      (generator-app generation-orchestration)
+
+     ;; Ramo topologico sperimentale shadow
+     (generator-app ui-metrics)
+     (generator-app topological-layout)
+     (generator-app topological-normalizer)
 
      ;; Facade: sempre ultima
      (generator-app code-generator)))
