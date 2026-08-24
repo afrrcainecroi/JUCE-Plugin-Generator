@@ -664,6 +664,174 @@
               (soft-cost=? group 0 0)
               (eq? (field group 'cross-align) 'end))))
 
+(let* ((omitted
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'rotary-slider 'compact)
+               (lt:group 'omitted-gap #:layout 'horizontal 'a 'b))))
+       (explicit
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'rotary-slider 'compact)
+               (lt:group 'zero-gap #:layout 'horizontal #:gap 0 'a 'b))))
+       (omitted-group (resolved-node omitted 'omitted-gap))
+       (zero-group (resolved-node explicit 'zero-gap)))
+  (check 'group-omitted-gap-preserves-adjacency
+         (and (= (field (resolved-node omitted 'a) 'col) 1)
+              (= (field (resolved-node omitted 'b) 'col) 9)
+              (= (field omitted-group 'gap) 0)))
+  (check 'group-explicit-zero-gap-equivalence
+         (and (= (field (resolved-node omitted 'a) 'col)
+                 (field (resolved-node explicit 'a) 'col))
+              (= (field (resolved-node omitted 'b) 'col)
+                 (field (resolved-node explicit 'b) 'col))
+              (= (field omitted-group 'colSpan)
+                 (field zero-group 'colSpan))
+              (= (field zero-group 'gap) 0))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'rotary-slider 'compact)
+               (lt:group 'hard-rational-gap #:layout 'horizontal
+                         #:gap 1/2 'a 'b))))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b))
+       (group (resolved-node resolved 'hard-rational-gap)))
+  (check 'group-horizontal-hard-rational-gap
+         (and (= (field b 'col) 19/2)
+              (= (field b 'col)
+                 (+ (field a 'col) (field a 'colSpan) 1/2))
+              (= (field group 'gap) 1/2)
+              (exact? (field b 'col)))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'rotary-slider 'compact)
+               (lt:group 'hard-vertical-gap #:layout 'vertical
+                         #:gap 2 'a 'b))))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b)))
+  (check 'group-vertical-hard-gap
+         (= (field b 'row)
+            (+ (field a 'row) (field a 'rowSpan) 2))))
+
+(check 'group-invalid-gap
+       (and (rejected?
+             (lambda ()
+               (lt:group 'g #:layout 'horizontal 'a 'b #:gap)))
+            (rejected?
+             (lambda ()
+               (lt:group 'g #:layout 'horizontal
+                         #:gap 1 #:gap 2 'a 'b)))
+            (rejected?
+             (lambda ()
+               (lt:group 'g #:layout 'horizontal #:gap -1 'a 'b)))
+            (rejected?
+             (lambda ()
+               (lt:group 'g #:layout 'horizontal #:gap 1.0 'a 'b)))
+            (rejected?
+             (lambda ()
+               (lt:group 'g #:layout 'horizontal #:gap 'wide 'a 'b)))
+            (rejected?
+             (lambda ()
+               (lt:group 'g #:layout 'horizontal #:gap 1+2i 'a 'b)))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'rotary-slider 'compact)
+               (lt:group 'gap-cross-center #:layout 'horizontal
+                         #:cross-align 'center #:gap 1/2 'a 'b))))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b)))
+  (check 'group-gap-with-cross-align-center
+         (and (= (field b 'col)
+                 (+ (field a 'col) (field a 'colSpan) 1/2))
+              (= (+ (field a 'row) (/ (field a 'rowSpan) 2))
+                 (+ (field b 'row) (/ (field b 'rowSpan) 2))))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'rotary-slider 'compact)
+               (lt:group 'gap-area #:layout 'horizontal
+                         #:gap 1/2 #:area 'center 'a 'b))
+         #:screen-rows 15 #:screen-cols 24))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b))
+       (group (resolved-node resolved 'gap-area)))
+  (check 'group-rational-gap-with-area-center
+         (and (= (field group 'col) 25/4)
+              (= (field group 'row) 11/2)
+              (= (field group 'colSpan) 27/2)
+              (= (field b 'col) (+ (field a 'col) 17/2))
+              (exact? (field group 'col)))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'rotary-slider 'compact)
+               (lt:group 'soft-preferred-gap #:layout 'horizontal
+                         #:gap 2 #:cohesion 'strong 'a 'b))))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b))
+       (group (resolved-node resolved 'soft-preferred-gap)))
+  (check 'cohesion-exact-preferred-gap-zero-cost
+         (and (= (field b 'col)
+                 (+ (field a 'col) (field a 'colSpan) 2))
+              (soft-cost=? group 0 0))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact #:col 1)
+               (lt:node 'b 'rotary-slider 'compact #:col 9)
+               (lt:group 'soft-relaxed-gap #:layout 'horizontal
+                         #:gap 2 #:cohesion 'strong 'a 'b))))
+       (group (resolved-node resolved 'soft-relaxed-gap)))
+  (check 'cohesion-relaxed-gap-keeps-order-only
+         (and (= (field (resolved-node resolved 'b) 'col) 9)
+              (soft-cost=? group 0 6))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact #:col 1)
+               (lt:node 'b 'rotary-slider 'compact #:col 20)
+               (lt:group 'soft-excess-gap #:layout 'horizontal
+                         #:gap 2 #:cohesion 'strong 'a 'b))))
+       (group (resolved-node resolved 'soft-excess-gap)))
+  (check 'cohesion-forced-excess-gap-cost
+         (soft-cost=? group 0 27)))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact #:col 1)
+               (lt:node 'b 'rotary-slider 'compact #:col 1)
+               (lt:group 'soft-overlap-gap #:layout 'horizontal
+                         #:gap 2 #:cohesion 'strong 'a 'b))))
+       (group (resolved-node resolved 'soft-overlap-gap)))
+  (check 'cohesion-gap-overlap-remains-order-violation
+         (soft-cost=? group 3 0)))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact #:col 1)
+               (lt:node 'b 'rotary-slider 'compact #:col 12)
+               (lt:group 'gap-weak #:layout 'horizontal
+                         #:gap 2 #:cohesion 'weak 'a 'b)
+               (lt:group 'gap-medium #:layout 'horizontal
+                         #:gap 2 #:cohesion 'medium 'a 'b)
+               (lt:group 'gap-strong #:layout 'horizontal
+                         #:gap 2 #:cohesion 'strong 'a 'b))))
+       (weak (resolved-node resolved 'gap-weak))
+       (medium (resolved-node resolved 'gap-medium))
+       (strong (resolved-node resolved 'gap-strong)))
+  (check 'cohesion-gap-deviation-scales-by-strength
+         (and (soft-cost=? weak 0 1)
+              (soft-cost=? medium 0 2)
+              (soft-cost=? strong 0 3))))
+
 ;; Omitting cohesion preserves the original hard adjacency contract.
 (let* ((resolved
         (lt:solve
@@ -676,6 +844,7 @@
               (= (field (resolved-node resolved 'b) 'col) 9)
               (not (field group 'cohesion))
               (not (field group 'cohesion-weight))
+              (= (field group 'gap) 0)
               (soft-cost=? group 0 0)
               (not (resolved-kind resolved 'solver-metadata)))))
 

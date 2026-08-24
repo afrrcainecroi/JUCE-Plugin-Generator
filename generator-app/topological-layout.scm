@@ -79,49 +79,62 @@
                      (cohesion #f)
                      (cross-align #f)
                      (cross-align-seen? #f)
+                     (gap 0)
+                     (gap-seen? #f)
                      (area #f)
                      (area-seen? #f)
                      (members '()))
             (cond
              ((null? remaining)
               (list layout cohesion cross-align cross-align-seen?
-                    area area-seen? (reverse members)))
+                    gap gap-seen? area area-seen? (reverse members)))
              ((eq? (car remaining) #:layout)
               (when (or layout (null? (cdr remaining)))
                 (error "Invalid or duplicate group #:layout" id arguments))
               (loop (cddr remaining) (cadr remaining) cohesion
-                    cross-align cross-align-seen? area area-seen? members))
+                    cross-align cross-align-seen? gap gap-seen?
+                    area area-seen? members))
              ((eq? (car remaining) #:cohesion)
               (when (or cohesion (null? (cdr remaining)))
                 (error "Invalid or duplicate group #:cohesion" id arguments))
               (loop (cddr remaining) layout (cadr remaining)
-                    cross-align cross-align-seen? area area-seen? members))
+                    cross-align cross-align-seen? gap gap-seen?
+                    area area-seen? members))
              ((eq? (car remaining) #:cross-align)
               (when (or cross-align-seen? (null? (cdr remaining)))
                 (error "Invalid or duplicate group #:cross-align"
                        id arguments))
               (loop (cddr remaining) layout cohesion (cadr remaining) #t
+                    gap gap-seen? area area-seen? members))
+             ((eq? (car remaining) #:gap)
+              (when (or gap-seen? (null? (cdr remaining)))
+                (error "Invalid or duplicate group #:gap" id arguments))
+              (loop (cddr remaining) layout cohesion
+                    cross-align cross-align-seen? (cadr remaining) #t
                     area area-seen? members))
              ((eq? (car remaining) #:area)
               (when (or area-seen? (null? (cdr remaining)))
                 (error "Invalid or duplicate group #:area" id arguments))
               (loop (cddr remaining) layout cohesion
-                    cross-align cross-align-seen? (cadr remaining)
-                    #t members))
+                    cross-align cross-align-seen? gap gap-seen?
+                    (cadr remaining) #t members))
              ((keyword? (car remaining))
               (error "Unknown topological layout group keyword"
                      id (car remaining)))
              (else
               (loop (cdr remaining) layout cohesion
-                    cross-align cross-align-seen? area area-seen?
+                    cross-align cross-align-seen? gap gap-seen?
+                    area area-seen?
                     (cons (car remaining) members))))))
          (layout (list-ref parsed 0))
          (cohesion (list-ref parsed 1))
          (cross-align (list-ref parsed 2))
          (cross-align-seen? (list-ref parsed 3))
-         (area (list-ref parsed 4))
-         (area-seen? (list-ref parsed 5))
-         (members (list-ref parsed 6)))
+         (gap (list-ref parsed 4))
+         (gap-seen? (list-ref parsed 5))
+         (area (list-ref parsed 6))
+         (area-seen? (list-ref parsed 7))
+         (members (list-ref parsed 8)))
     (unless layout
       (error "Topological layout group requires #:layout" id arguments))
     (unless (memq layout '(horizontal vertical))
@@ -138,6 +151,10 @@
       (unless (memq cross-align '(start center end))
         (error "Invalid topological layout group cross-align"
                id cross-align)))
+    (when gap-seen?
+      (unless (and (number? gap) (real? gap) (exact? gap) (>= gap 0))
+        (error "Topological layout group gap must be a non-negative exact real number"
+               id gap)))
     (when area-seen?
       (validate-area-path! id area))
     (unless (>= (length members) 2)
@@ -152,6 +169,7 @@
       (layout . ,layout)
       (cohesion . ,cohesion)
       (cross-align . ,(and cross-align-seen? cross-align))
+      (gap . ,gap)
       (area . ,(and area-seen? area))
       (members . ,members))))
 
@@ -359,9 +377,10 @@
                   (previous-size (assoc-ref sizes previous-id))
                   (extent (if (eq? axis 'horizontal)
                               (car previous-size)
-                              (cdr previous-size))))
-             (list (edge previous-id current-id extent)
-                   (edge current-id previous-id (- extent)))))
+                              (cdr previous-size)))
+                  (distance (+ extent (field group 'gap))))
+             (list (edge previous-id current-id distance)
+                   (edge current-id previous-id (- distance)))))
          (zip members (cdr members))))))
 
 (define (cohesion-weight cohesion)
@@ -371,13 +390,14 @@
     ((weak) 1)
     (else (error "Unknown soft cohesion" cohesion))))
 
-;; A wish is (WEIGHT AXIS PREVIOUS CURRENT EXTENT). It remains separate from
-;; the authoritative hard graph until the soft optimization phase.
+;; A wish is (WEIGHT AXIS PREVIOUS CURRENT EXTENT PREFERRED-GAP). It remains
+;; separate from the authoritative hard graph until the soft optimization phase.
 (define (soft-wishes groups sizes axis)
   (append-map
    (lambda (group)
      (let ((cohesion (field group 'cohesion))
            (layout (field group 'layout))
+           (gap (field group 'gap))
            (members (field group 'members)))
        (if (and cohesion
                 (eq? layout (if (eq? axis 'horizontal)
@@ -392,7 +412,7 @@
                                  (car size)
                                  (cdr size))))
                 (list (cohesion-weight cohesion) axis
-                      previous-id current-id extent)))
+                      previous-id current-id extent gap)))
             (zip members (cdr members)))
            '())))
    groups))
@@ -625,15 +645,20 @@
    (+ (assoc-ref left 'positive-gap)
       (assoc-ref right 'positive-gap))))
 
+(define (cohesion-pair-cost weight actual-gap preferred-gap)
+  (if (< actual-gap 0)
+      (make-soft-cost weight 0)
+      (make-soft-cost 0
+                      (* weight (abs (- actual-gap preferred-gap))))))
+
 (define (soft-axis-cost wishes distances)
   (fold (lambda (wish total)
           (let ((weight (car wish))
-                (gap (wish-gap wish distances)))
+                (actual-gap (wish-gap wish distances))
+                (preferred-gap (list-ref wish 5)))
             (add-soft-cost
              total
-             (if (< gap 0)
-                 (make-soft-cost weight 0)
-                 (make-soft-cost 0 (* weight gap))))))
+             (cohesion-pair-cost weight actual-gap preferred-gap))))
         (make-soft-cost 0 0)
         wishes))
 
@@ -647,9 +672,11 @@
              (previous-id (list-ref wish 2))
              (current-id (list-ref wish 3))
              (extent (list-ref wish 4))
+             (preferred-gap (list-ref wish 5))
+             (preferred-distance (+ extent preferred-gap))
              (exact-edges
-              (list (edge previous-id current-id extent)
-                    (edge current-id previous-id (- extent))))
+              (list (edge previous-id current-id preferred-distance)
+                    (edge current-id previous-id (- preferred-distance))))
              (order-edge (list (edge previous-id current-id extent))))
         (append-map
          (lambda (configuration)
@@ -766,7 +793,8 @@
     (if (not cohesion)
         (make-soft-cost 0 0)
         (let ((layout (field group 'layout))
-              (weight (cohesion-weight cohesion)))
+              (weight (cohesion-weight cohesion))
+              (preferred-gap (field group 'gap)))
           (fold
            (lambda (pair total)
              (let* ((previous (node-by-id resolved-nodes (car pair)))
@@ -780,9 +808,7 @@
                                (field previous span-key)))))
                (add-soft-cost
                 total
-                (if (< gap 0)
-                    (make-soft-cost weight 0)
-                    (make-soft-cost 0 (* weight gap))))))
+                (cohesion-pair-cost weight gap preferred-gap))))
            (make-soft-cost 0 0)
            (zip (field group 'members)
                 (cdr (field group 'members))))))))
@@ -808,6 +834,7 @@
       (layout . ,(field group 'layout))
       (cohesion . ,(field group 'cohesion))
       (cross-align . ,(field group 'cross-align))
+      (gap . ,(field group 'gap))
       (area . ,(field group 'area))
       (cohesion-weight . ,(and (field group 'cohesion)
                                (cohesion-weight (field group 'cohesion))))

@@ -93,6 +93,8 @@
  (generator-app code-generator)
  (generator-app generation-state)
  (generator-app generation-orchestration)
+(generator-app topological-layout)
+(generator-app topological-normalizer)
  )
 
 ;;
@@ -1336,7 +1338,10 @@ var id var))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defun*-public MakeNewProject (new-name interface-definitions)
+(defun*-public MakeNewProject (new-name interface-definitions
+					#:key
+					(layout-mode 'legacy)
+					(topology-declarations '()))
   ;; (begin
   ;;   (display "Something of strange happened. Call franco!!!")
   ;;   #f)
@@ -1378,7 +1383,8 @@ var id var))
        #:files-only #t)
       ;;
       ;;Ora gli chiedo di specificare il file di configurazione dell'interfaccia utente
-      (GenerateC++ g::gen-var dst-folder new-name interface-definitions #f) ;;non è aggiornamento!!
+      ;; (GenerateC++ g::gen-var dst-folder new-name interface-definitions #f) ;;non è aggiornamento!!
+      (GenerateC++ g::gen-var dst-folder new-name interface-definitions #f #:layout-mode layout-mode #:topology-declarations topology-declarations)
       ;;
       ;; ;; Queste tre righe non servono, è GenerateC++ che chiama la CLI di projucer e genera i makefile
       ;; (AskForOkCancel "Info" "Now you can open the project in Projucer to set the target environment (linux/Macos)" "Ok")
@@ -1389,7 +1395,8 @@ var id var))
      ((eqv? (stat:type file-info) 'directory)
       ;; (match `(,(AskForRemoveLeave new-name))
       ;; 	(('Update) ;; non faccio nulla il progetto esiste già e sta bene, quindi aggiorno i codici dove serve farlo
-      (GenerateC++ g::gen-var dst-folder new-name interface-definitions #t) ;;è un aggiornamento!!
+      ;;(GenerateC++ g::gen-var dst-folder new-name interface-definitions #t) ;;è un aggiornamento!!
+      (GenerateC++ g::gen-var dst-folder new-name interface-definitions #t #:layout-mode layout-mode #:topology-declarations topology-declarations)
       (display "Programma aggiornato correttamente\n")
       ;;  )
       ;; (_ (display "Terminazione su richiesta utente\n"))
@@ -1560,84 +1567,258 @@ var id var))
   (GenerateBackground 57)
   )
 
+
+
 (define (NewGeneric-interface dst-folder new-name)
+
+  ;; ============================================================
+  ;; SCREEN / GRID LOGICA
+  ;; ============================================================
+
+  (make <screen>
+        #:ratio 1.5
+        #:width 1000)
+
+  (make <grid>
+        #:rows 24
+        #:cols 48
+        #:show-grid #f)
+
+  ;; ============================================================
+  ;; TITLE
+  ;; metric preferred: 12 x 3
+  ;; ============================================================
+
+  (make <palette-label>
+    #:id "palette-title"
+    #:text "TOPOLOGICAL LAYOUT"
+    #:justification 'centred
+
+    ;; volutamente falsi
+    #:row-span 1
+    #:col-span 1)
+
+  ;; ============================================================
+  ;; MAIN METER
+  ;; segmented-horizontal preferred: 14 x 4
+  ;; ============================================================
+
+  (make <meter>
+    #:id "meter-main"
+
+    #:style 'segmented
+    #:orientation 'horizontal
+    #:scale-type 'db
+
+    #:range-min -60.0
+    #:range-max 6.0
+    #:num-segments 20
+
+    #:row-span 1
+    #:col-span 1)
+
+  ;; ============================================================
+  ;; SCOPE
+  ;; preferred: 12 x 8
+  ;; ============================================================
+
+  (make <scope>
+    #:id "scope-main"
+    #:role 'scope
+
+    #:grid-style 'radar
+    #:is-sharp #f
+    #:glow-multiplier 1.0
+
+    #:row-span 1
+    #:col-span 1)
+
+  ;; ============================================================
+  ;; GAIN
+  ;; rotary preferred: 7 x 7
+  ;; ============================================================
+
+  (make <rotary-slider>
+    #:id "gain"
+
+    #:parameter-id "demoGain"
+    #:parameter-name "Demo Gain"
+    #:processor-reference "demoGain"
+    #:version-hint 1
+
+    #:title "GAIN"
+
+    #:min -24.0
+    #:max 24.0
+    #:default 0.0
+    #:interval 0.1
+
+    #:show-value #t
+    #:show-ticks #t
+    #:show-labels #t
+    #:tick-count 5
+    #:tick-mode 'all
+    #:tick-labels '("-24" "-12" "0" "+12" "+24")
+
+    #:row-span 1
+    #:col-span 1)
+
+  ;; ============================================================
+  ;; DRIVE
+  ;; horizontal linear preferred: 14 x 4
+  ;; ============================================================
+
+  (make <linear-slider>
+    #:id "drive"
+
+    #:parameter-id "demoDrive"
+    #:parameter-name "Demo Drive"
+    #:processor-reference "demoDrive"
+    #:version-hint 1
+
+    #:orientation 'horizontal
+    #:title "DRIVE"
+
+    #:min 0.0
+    #:max 100.0
+    #:default 50.0
+    #:interval 1.0
+
+    #:show-value #t
+    #:show-ticks #t
+    #:show-labels #t
+    #:tick-count 5
+    #:tick-mode 'all
+    #:tick-labels '("0" "25" "50" "75" "100")
+
+    #:row-span 1
+    #:col-span 1)
+
+  ;; ============================================================
+  ;; SELECTOR
+  ;; preferred: 12 x 2
+  ;; ============================================================
+
+  (make <selector>
+    #:id "selector-main"
+
+    #:items '("LOW" "NORMAL" "HIGH")
+    #:default-index 2
+
+    #:row-span 1
+    #:col-span 1)
+
+  ;; ============================================================
+  ;; MODE
+  ;; text-button preferred: 8 x 3
+  ;; ============================================================
+
+  (make <text-button>
+    #:id "mode"
+    #:text "MODE"
+
+    #:row-span 1
+    #:col-span 1))
+
+(define pppbuttavia-topology
+  (list
+   (lt:place-in-area 'palette-title 'top)
+
+(lt:group 'main-strip
+  #:layout 'horizontal
+  #:cross-align 'center
+  #:gap 1
+  #:area 'center
+  'meter-main 'scope-main 'gain)
+
+(lt:group 'bottom-strip
+  #:layout 'horizontal
+  #:cross-align 'center
+  #:gap 1
+  #:area 'bottom
+  'drive 'selector-main 'mode)
+   
+
+   (lt:align-center-x 'gain 'mode)))
+
+(define (NewGeneric-interface-old dst-folder new-name)
 
   ;; ============================================================
   ;; SCREEN / GRID
   ;; ============================================================
 
   (make <screen>
-        #:ratio (/ (+ 1.0 (sqrt 5.0)) 2.0)
-        #:width 800)
+    #:ratio (/ (+ 1.0 (sqrt 5.0)) 2.0)
+    #:width 800)
 
   (make <grid>
-        #:rows 24
-        #:cols 24
-        #:show-grid #t)
+    #:rows 24
+    #:cols 24
+    #:show-grid #t)
 
   (make <rotary-slider>
-  #:id "Input Gain"
-  #:role 'input-gain
+    #:id "Input Gain"
+    #:role 'input-gain
 
-  #:parameter-id "inputGain"
-  #:parameter-name "Input Gain"
-  #:processor-reference "inputGain"
-  #:version-hint 1
+    #:parameter-id "inputGain"
+    #:parameter-name "Input Gain"
+    #:processor-reference "inputGain"
+    #:version-hint 1
 
-  #:title "INPUT GAIN"
+    #:title "INPUT GAIN"
 
-  #:min -24.0
-  #:max 24.0
-  #:default 0.0
-  #:interval 0.1
+    #:min -24.0
+    #:max 24.0
+    #:default 0.0
+    #:interval 0.1
 
-  #:scale 'linear
-  #:value-type 'default
-  #:suffix " dB"
+    #:scale 'linear
+    #:value-type 'default
+    #:suffix " dB"
 
-  #:show-value #t
-  #:show-ticks #t
-  #:show-labels #t
-  #:tick-count 5
-  #:tick-mode 'all
-  #:tick-labels '("-24" "-12" "0" "+12" "+24")
+    #:show-value #t
+    #:show-ticks #t
+    #:show-labels #t
+    #:tick-count 5
+    #:tick-mode 'all
+    #:tick-labels '("-24" "-12" "0" "+12" "+24")
 
-  #:row 16
-  #:col 1
-  #:row-span 7
-  #:col-span 6)
+    #:row 16
+    #:col 1
+    #:row-span 7
+    #:col-span 6)
 
   (make <rotary-slider>
-  #:id "Output Gain"
-  #:role 'output-gain
+    #:id "Output Gain"
+    #:role 'output-gain
 
-  #:parameter-id "outputGain"
-  #:parameter-name "Output Gain"
-  #:processor-reference "outputGain"
-  #:version-hint 1
+    #:parameter-id "outputGain"
+    #:parameter-name "Output Gain"
+    #:processor-reference "outputGain"
+    #:version-hint 1
 
-  #:title "OUTPUT GAIN"
+    #:title "OUTPUT GAIN"
 
-  #:min -24.0
-  #:max 24.0
-  #:default 0.0
-  #:interval 0.1
+    #:min -24.0
+    #:max 24.0
+    #:default 0.0
+    #:interval 0.1
 
-  #:scale 'linear
-  #:value-type 'default
-  #:suffix " dB"
+    #:scale 'linear
+    #:value-type 'default
+    #:suffix " dB"
 
-  #:show-value #t
-  #:show-ticks #t
-  #:show-labels #t
-  #:tick-count 5
-  #:tick-mode 'all
-  #:tick-labels '("-24" "-12" "0" "+12" "+24")
+    #:show-value #t
+    #:show-ticks #t
+    #:show-labels #t
+    #:tick-count 5
+    #:tick-mode 'all
+    #:tick-labels '("-24" "-12" "0" "+12" "+24")
 
-  #:row 16
-  #:col 21
-  #:row-span 7
-  #:col-span 6)
+    #:row 16
+    #:col 21
+    #:row-span 7
+    #:col-span 6)
   
 
   ;; ============================================================
@@ -1756,39 +1937,39 @@ var id var))
   ;; ============================================================
   ;; OVERSAMPLING
   ;; ============================================================
-(make <rotary-slider>
-  #:id "Oversampling"
-  #:role 'oversampling
+  (make <rotary-slider>
+    #:id "Oversampling"
+    #:role 'oversampling
 
-  #:parameter-id "oversampling"
-  #:parameter-name "Oversampling"
-  #:processor-reference "oversampling"
-  #:version-hint 1
+    #:parameter-id "oversampling"
+    #:parameter-name "Oversampling"
+    #:processor-reference "oversampling"
+    #:version-hint 1
 
-  #:title "OVERSAMPLING"
+    #:title "OVERSAMPLING"
 
-  #:min 0.0
-  #:max 3.0
-  #:default 0.0
-  #:interval 1.0
+    #:min 0.0
+    #:max 3.0
+    #:default 0.0
+    #:interval 1.0
 
-  #:scale 'linear
-  #:value-type 'default
-  #:suffix ""
+    #:scale 'linear
+    #:value-type 'default
+    #:suffix ""
 
-  #:show-value #t
-  #:show-ticks #t
-  #:show-labels #t
-  #:tick-count 4
-  #:tick-mode 'all
+    #:show-value #t
+    #:show-ticks #t
+    #:show-labels #t
+    #:tick-count 4
+    #:tick-mode 'all
 
-  #:tick-labels
-  '("OFF" "2x" "4x" "8x")
+    #:tick-labels
+    '("OFF" "2x" "4x" "8x")
 
-  #:row 16
-  #:col 4
-  #:row-span 7
-  #:col-span 7)
+    #:row 16
+    #:col 4
+    #:row-span 7
+    #:col-span 7)
   
 
 
@@ -1796,81 +1977,81 @@ var id var))
   ;; FFT SIZE
   ;; ============================================================
 
- (make <rotary-slider>
-  #:id "FFT Size"
-  #:role 'fft-size
+  (make <rotary-slider>
+    #:id "FFT Size"
+    #:role 'fft-size
 
-  #:parameter-id "fftSize"
-  #:parameter-name "FFT Size"
-  #:processor-reference "fftSize"
-  #:version-hint 1
+    #:parameter-id "fftSize"
+    #:parameter-name "FFT Size"
+    #:processor-reference "fftSize"
+    #:version-hint 1
 
-  #:title "FFT SIZE"
+    #:title "FFT SIZE"
 
-  #:min 0.0
-  #:max 6.0
-  #:default 0.0
-  #:interval 1.0
+    #:min 0.0
+    #:max 6.0
+    #:default 0.0
+    #:interval 1.0
 
-  #:scale 'linear
-  #:value-type 'default
-  #:suffix ""
+    #:scale 'linear
+    #:value-type 'default
+    #:suffix ""
 
-  #:show-value #t
-  #:show-ticks #t
-  #:show-labels #t
-  #:tick-count 7
-  #:tick-mode 'all
+    #:show-value #t
+    #:show-ticks #t
+    #:show-labels #t
+    #:tick-count 7
+    #:tick-mode 'all
 
-  #:tick-labels
-  '("OFF"
-    "256"
-    "512"
-    "1024"
-    "2048"
-    "4096"
-    "8192")
+    #:tick-labels
+    '("OFF"
+      "256"
+      "512"
+      "1024"
+      "2048"
+      "4096"
+      "8192")
 
-  #:row 16
-  #:col 13
-  #:row-span 7
-  #:col-span 8)
+    #:row 16
+    #:col 13
+    #:row-span 7
+    #:col-span 8)
 
- (make <normal-toggle-button>
-  #:id "Bypass"
-  #:role 'bypass
+  (make <normal-toggle-button>
+    #:id "Bypass"
+    #:role 'bypass
 
-  #:parameter-id "bypass"
-  #:parameter-name "Bypass"
-  #:processor-reference "bypass"
-  #:version-hint 1
+    #:parameter-id "bypass"
+    #:parameter-name "Bypass"
+    #:processor-reference "bypass"
+    #:version-hint 1
 
-  #:title "BYPASS"
+    #:title "BYPASS"
 
-  #:default 0.0
+    #:default 0.0
 
-  #:row 21
-  #:col 4
-  #:row-span 2
-  #:col-span 5)
+    #:row 21
+    #:col 4
+    #:row-span 2
+    #:col-span 5)
 
- (make <normal-toggle-button>
-  #:id "DSP Bypass"
-  #:role 'dsp-bypass
+  (make <normal-toggle-button>
+    #:id "DSP Bypass"
+    #:role 'dsp-bypass
 
-  #:parameter-id "dspBypass"
-  #:parameter-name "DSP Bypass"
-  #:processor-reference "dspBypass"
-  #:version-hint 1
+    #:parameter-id "dspBypass"
+    #:parameter-name "DSP Bypass"
+    #:processor-reference "dspBypass"
+    #:version-hint 1
 
-  #:title "DSP BYPASS"
+    #:title "DSP BYPASS"
 
-  #:default 0.0
+    #:default 0.0
 
-  #:row 21
-  #:col 10
-  #:row-span 2
-  #:col-span 5)
+    #:row 21
+    #:col 10
+    #:row-span 2
+    #:col-span 5)
 
   )
 

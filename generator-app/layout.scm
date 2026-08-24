@@ -94,9 +94,9 @@ standardScreenHeight = standardScreenWidth / screenRatio;
            (append grid-json components-json)
            #:pretty #t)))
     (string-append
-     (format #f
-             "bool drawDebugGrid = ~a;\n"
-             (if show-grid "true" "false"))
+     ;; (format #f
+     ;;         "bool drawDebugGrid = ~a;\n"
+     ;;         (if show-grid "true" "false"))
      "componentMap = {\n"
      (apply
       string-append
