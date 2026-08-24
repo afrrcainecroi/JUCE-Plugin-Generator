@@ -77,38 +77,51 @@
           (let loop ((remaining arguments)
                      (layout #f)
                      (cohesion #f)
+                     (cross-align #f)
+                     (cross-align-seen? #f)
                      (area #f)
                      (area-seen? #f)
                      (members '()))
             (cond
              ((null? remaining)
-              (list layout cohesion area area-seen? (reverse members)))
+              (list layout cohesion cross-align cross-align-seen?
+                    area area-seen? (reverse members)))
              ((eq? (car remaining) #:layout)
               (when (or layout (null? (cdr remaining)))
                 (error "Invalid or duplicate group #:layout" id arguments))
-              (loop (cddr remaining) (cadr remaining) cohesion area
-                    area-seen? members))
+              (loop (cddr remaining) (cadr remaining) cohesion
+                    cross-align cross-align-seen? area area-seen? members))
              ((eq? (car remaining) #:cohesion)
               (when (or cohesion (null? (cdr remaining)))
                 (error "Invalid or duplicate group #:cohesion" id arguments))
-              (loop (cddr remaining) layout (cadr remaining) area
-                    area-seen? members))
+              (loop (cddr remaining) layout (cadr remaining)
+                    cross-align cross-align-seen? area area-seen? members))
+             ((eq? (car remaining) #:cross-align)
+              (when (or cross-align-seen? (null? (cdr remaining)))
+                (error "Invalid or duplicate group #:cross-align"
+                       id arguments))
+              (loop (cddr remaining) layout cohesion (cadr remaining) #t
+                    area area-seen? members))
              ((eq? (car remaining) #:area)
               (when (or area-seen? (null? (cdr remaining)))
                 (error "Invalid or duplicate group #:area" id arguments))
-              (loop (cddr remaining) layout cohesion (cadr remaining)
+              (loop (cddr remaining) layout cohesion
+                    cross-align cross-align-seen? (cadr remaining)
                     #t members))
              ((keyword? (car remaining))
               (error "Unknown topological layout group keyword"
                      id (car remaining)))
              (else
-              (loop (cdr remaining) layout cohesion area area-seen?
+              (loop (cdr remaining) layout cohesion
+                    cross-align cross-align-seen? area area-seen?
                     (cons (car remaining) members))))))
          (layout (list-ref parsed 0))
          (cohesion (list-ref parsed 1))
-         (area (list-ref parsed 2))
-         (area-seen? (list-ref parsed 3))
-         (members (list-ref parsed 4)))
+         (cross-align (list-ref parsed 2))
+         (cross-align-seen? (list-ref parsed 3))
+         (area (list-ref parsed 4))
+         (area-seen? (list-ref parsed 5))
+         (members (list-ref parsed 6)))
     (unless layout
       (error "Topological layout group requires #:layout" id arguments))
     (unless (memq layout '(horizontal vertical))
@@ -118,6 +131,13 @@
              id cohesion))
     (unless (or (not cohesion) (memq cohesion '(strong medium weak)))
       (error "Invalid topological layout group cohesion" id cohesion))
+    (when cross-align-seen?
+      (unless (symbol? cross-align)
+        (error "Topological layout group cross-align must be a symbol"
+               id cross-align))
+      (unless (memq cross-align '(start center end))
+        (error "Invalid topological layout group cross-align"
+               id cross-align)))
     (when area-seen?
       (validate-area-path! id area))
     (unless (>= (length members) 2)
@@ -131,6 +151,7 @@
       (id . ,id)
       (layout . ,layout)
       (cohesion . ,cohesion)
+      (cross-align . ,(and cross-align-seen? cross-align))
       (area . ,(and area-seen? area))
       (members . ,members))))
 
@@ -296,6 +317,32 @@
                        (edge id reference-id (- delta)))))
              (cdr ids)))))))
 
+(define (group-cross-alignment-relation group)
+  (let ((layout (field group 'layout))
+        (cross-align (field group 'cross-align)))
+    (and cross-align
+         (case layout
+           ((horizontal)
+            (case cross-align
+              ((start) 'align-top)
+              ((center) 'align-center-y)
+              ((end) 'align-bottom)))
+           ((vertical)
+            (case cross-align
+              ((start) 'align-left)
+              ((center) 'align-center-x)
+              ((end) 'align-right)))))))
+
+(define (group-cross-alignment-edges group nodes sizes axis)
+  (let ((relation (group-cross-alignment-relation group)))
+    (if relation
+        (alignment-edges
+         `((kind . alignment)
+           (relation . ,relation)
+           (nodes . ,(field group 'members)))
+         nodes sizes axis)
+        '())))
+
 (define (group-edges group sizes axis)
   (let ((layout (field group 'layout))
         (cohesion (field group 'cohesion))
@@ -382,6 +429,10 @@
     (lambda (alignment)
       (alignment-edges alignment nodes sizes axis))
     alignments)
+   (append-map
+    (lambda (group)
+      (group-cross-alignment-edges group nodes sizes axis))
+    groups)
    (append-map
     (lambda (group) (group-edges group sizes axis))
     groups)))
@@ -756,6 +807,7 @@
       (id . ,(field group 'id))
       (layout . ,(field group 'layout))
       (cohesion . ,(field group 'cohesion))
+      (cross-align . ,(field group 'cross-align))
       (area . ,(field group 'area))
       (cohesion-weight . ,(and (field group 'cohesion)
                                (cohesion-weight (field group 'cohesion))))

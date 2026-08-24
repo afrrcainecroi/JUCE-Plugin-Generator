@@ -377,7 +377,8 @@
               (= (field group 'row) 1)
               (= (field group 'col) 1)
               (= (field group 'rowSpan) 6)
-              (= (field group 'colSpan) 24))))
+              (= (field group 'colSpan) 24)
+              (not (field group 'cross-align)))))
 
 (let* ((resolved
         (lt:solve
@@ -524,6 +525,144 @@
               (= (field group 'col) 1)
               (= (field group 'rowSpan) 13)
               (= (field group 'colSpan) 9))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'rotary-slider 'compact)
+               (lt:group 'cross-horizontal-start #:layout 'horizontal
+                         #:cross-align 'start 'a 'b))))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b))
+       (group (resolved-node resolved 'cross-horizontal-start)))
+  (check 'group-cross-align-horizontal-start
+         (and (= (field a 'row) 1)
+              (= (field b 'row) 1)
+              (= (field b 'col) (+ (field a 'col) (field a 'colSpan)))
+              (eq? (field group 'cross-align) 'start))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'rotary-slider 'compact)
+               (lt:group 'cross-horizontal-center #:layout 'horizontal
+                         #:cross-align 'center 'a 'b))))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b)))
+  (check 'group-cross-align-horizontal-center-exact
+         (and (= (field a 'row) 1)
+              (= (field b 'row) 3/2)
+              (= (+ (field a 'row) (/ (field a 'rowSpan) 2))
+                 (+ (field b 'row) (/ (field b 'rowSpan) 2)))
+              (exact? (field b 'row))
+              (not (integer? (field b 'row))))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'rotary-slider 'compact)
+               (lt:group 'cross-horizontal-end #:layout 'horizontal
+                         #:cross-align 'end 'a 'b))))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b)))
+  (check 'group-cross-align-horizontal-end
+         (= (+ (field a 'row) (field a 'rowSpan))
+            (+ (field b 'row) (field b 'rowSpan)))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'rotary-slider 'compact)
+               (lt:group 'cross-vertical-start #:layout 'vertical
+                         #:cross-align 'start 'a 'b))))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b)))
+  (check 'group-cross-align-vertical-start
+         (and (= (field a 'col) 1)
+              (= (field b 'col) 1)
+              (= (field b 'row) (+ (field a 'row) (field a 'rowSpan))))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'rotary-slider 'compact)
+               (lt:group 'cross-vertical-center #:layout 'vertical
+                         #:cross-align 'center 'a 'b))))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b)))
+  (check 'group-cross-align-vertical-center-exact
+         (and (= (field a 'col) 1)
+              (= (field b 'col) 5/2)
+              (= (+ (field a 'col) (/ (field a 'colSpan) 2))
+                 (+ (field b 'col) (/ (field b 'colSpan) 2)))
+              (exact? (field b 'col))
+              (not (integer? (field b 'col))))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'rotary-slider 'compact)
+               (lt:group 'cross-vertical-end #:layout 'vertical
+                         #:cross-align 'end 'a 'b))))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b)))
+  (check 'group-cross-align-vertical-end
+         (= (+ (field a 'col) (field a 'colSpan))
+            (+ (field b 'col) (field b 'colSpan)))))
+
+(check 'group-invalid-cross-align
+       (and (rejected?
+             (lambda ()
+               (lt:group 'g #:layout 'horizontal
+                         #:cross-align 'baseline 'a 'b)))
+            (rejected?
+             (lambda ()
+               (lt:group 'g #:layout 'horizontal
+                         #:cross-align 1 'a 'b)))
+            (rejected?
+             (lambda ()
+               (lt:group 'g #:layout 'horizontal 'a 'b
+                         #:cross-align)))))
+
+(check 'group-duplicate-cross-align
+       (rejected?
+        (lambda ()
+          (lt:group 'g #:layout 'horizontal
+                    #:cross-align 'start #:cross-align 'end 'a 'b))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'rotary-slider 'compact)
+               (lt:group 'cross-area #:layout 'horizontal
+                         #:cross-align 'center #:area 'center 'a 'b))
+         #:screen-rows 15 #:screen-cols 24))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b))
+       (group (resolved-node resolved 'cross-area)))
+  (check 'group-cross-align-with-area
+         (and (= (field group 'col) 13/2)
+              (= (field group 'row) 11/2)
+              (= (field group 'colSpan) 13)
+              (= (field group 'rowSpan) 6)
+              (= (+ (field a 'row) (/ (field a 'rowSpan) 2))
+                 (+ (field b 'row) (/ (field b 'rowSpan) 2))))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'scope 'compact)
+               (lt:node 'b 'rotary-slider 'compact)
+               (lt:group 'cross-soft #:layout 'horizontal
+                         #:cross-align 'end #:cohesion 'strong 'a 'b))))
+       (a (resolved-node resolved 'a))
+       (b (resolved-node resolved 'b))
+       (group (resolved-node resolved 'cross-soft)))
+  (check 'group-cross-align-with-soft-cohesion
+         (and (= (field b 'col) (+ (field a 'col) (field a 'colSpan)))
+              (= (+ (field a 'row) (field a 'rowSpan))
+                 (+ (field b 'row) (field b 'rowSpan)))
+              (soft-cost=? group 0 0)
+              (eq? (field group 'cross-align) 'end))))
 
 ;; Omitting cohesion preserves the original hard adjacency contract.
 (let* ((resolved
