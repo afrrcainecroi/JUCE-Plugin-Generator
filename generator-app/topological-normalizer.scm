@@ -192,7 +192,7 @@
 
 (define (valid-topology-declaration? declaration)
   (case (field declaration 'kind)
-    ((alignment group) #t)
+    ((alignment group node-area) #t)
     ((node-constraints) (valid-node-constraints-declaration? declaration))
     (else #f)))
 
@@ -245,7 +245,8 @@
                   topology-declarations))
          (global-declarations
           (filter (lambda (declaration)
-                    (memq (field declaration 'kind) '(alignment group)))
+                    (memq (field declaration 'kind)
+                          '(alignment group node-area)))
                   topology-declarations))
          (nodes (attach-node-constraints
                  raw-nodes node-constraint-declarations))

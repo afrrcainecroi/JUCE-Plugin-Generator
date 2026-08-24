@@ -770,18 +770,18 @@
               (soft-cost=? group 0 0)
               (= (field group 'colSpan) 19))))
 
-;; A compact toggle pair is 8x3. On a 15x24 logical screen the deterministic
-;; earliest centers for the three columns are 5, 9, 17; for rows 5/2, 6, 11.
+;; A compact toggle pair has an 8x3 resolved bounding box. On a 15x24 logical
+;; screen, each area aligns that box by its requested edges or center.
 (define area-cases
   '((top-left 1 1)
-    (top 5 1)
-    (top-right 13 1)
-    (left 1 9/2)
-    (center 5 9/2)
-    (right 13 9/2)
-    (bottom-left 1 19/2)
-    (bottom 5 19/2)
-    (bottom-right 13 19/2)))
+    (top 9 1)
+    (top-right 17 1)
+    (left 1 7)
+    (center 9 7)
+    (right 17 7)
+    (bottom-left 1 13)
+    (bottom 9 13)
+    (bottom-right 17 13)))
 
 (for-each
  (lambda (case)
@@ -913,6 +913,21 @@
                            #:area 'top-right 'a 'b))
            #:screen-rows 15 #:screen-cols 24))))
 
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'a 'toggle-button 'compact #:col 17 #:row 13)
+               (lt:node 'b 'toggle-button 'compact)
+               (lt:group 'anchored-exactly #:layout 'horizontal
+                         #:area 'bottom-right 'a 'b)
+               (lt:align-top 'a 'b))
+         #:screen-rows 15 #:screen-cols 24))
+       (group (resolved-node resolved 'anchored-exactly)))
+  (check 'hard-position-compatible-with-bbox-placement
+         (and (= (field group 'col) 17)
+              (= (field group 'row) 13)
+              (= (+ (field group 'col) (field group 'colSpan)) 25)
+              (= (+ (field group 'row) (field group 'rowSpan)) 16))))
+
 ;; Translation into the bottom-right third preserves both axis offsets.
 (let* ((resolved
         (lt:solve
@@ -944,35 +959,35 @@
        (group (resolved-node resolved 'hierarchy)))
   (check 'hierarchical-top-right-top-left
          (and (equal? (field group 'area) '(top-right top-left))
-              (= (field group 'col) 15)
+              (= (field group 'col) 17)
               (= (field group 'row) 1))))
 
 (let* ((resolved (solve-hierarchical-area '(top-right top-right)))
        (group (resolved-node resolved 'hierarchy)))
   (check 'hierarchical-top-right-top-right
-         (and (= (field group 'col) 61/3)
+         (and (= (field group 'col) 21)
               (= (field group 'row) 1)
               (exact? (field group 'col))
-              (not (integer? (field group 'col))))))
+              (integer? (field group 'col)))))
 
 (let* ((resolved (solve-hierarchical-area '(top-right bottom-left)))
        (group (resolved-node resolved 'hierarchy)))
   (check 'hierarchical-top-right-bottom-left
-         (and (= (field group 'col) 15)
-              (= (field group 'row) 17/6))))
+         (and (= (field group 'col) 17)
+              (= (field group 'row) 3))))
 
 (let* ((resolved (solve-hierarchical-area '(center center)))
        (group (resolved-node resolved 'hierarchy)))
   (check 'hierarchical-center-center
-         (and (= (field group 'col) 29/3)
-              (= (field group 'row) 37/6))))
+         (and (= (field group 'col) 11)
+              (= (field group 'row) 7))))
 
 (let* ((resolved
         (solve-hierarchical-area '(bottom-right top-left center)))
        (group (resolved-node resolved 'hierarchy)))
   (check 'hierarchical-three-level-path
-         (and (= (field group 'col) 143/9)
-              (= (field group 'row) 181/18)
+         (and (= (field group 'col) 49/3)
+              (= (field group 'row) 31/3)
               (exact? (field group 'col))
               (exact? (field group 'row)))))
 
@@ -1098,5 +1113,69 @@
                  (- (field nested-b 'row) (field nested-a 'row)))
               (= (- (field base-b 'col) (field base-a 'col))
                  (- (field nested-b 'col) (field nested-a 'col))))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'single-top 'toggle-button 'compact)
+               (lt:place-in-area 'single-top 'top))
+         #:screen-rows 15 #:screen-cols 24))
+       (node (resolved-node resolved 'single-top)))
+  (check 'single-node-area-top
+         (and (= (field node 'col) 11)
+              (= (field node 'row) 1)
+              (= (field node 'colSpan) 4)
+              (= (field node 'rowSpan) 3))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'single-center 'toggle-button 'compact)
+               (lt:place-in-area 'single-center 'center))
+         #:screen-rows 15 #:screen-cols 24))
+       (node (resolved-node resolved 'single-center)))
+  (check 'single-node-area-center
+         (and (= (field node 'col) 11)
+              (= (field node 'row) 7))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'single-bottom-right 'toggle-button 'compact)
+               (lt:place-in-area 'single-bottom-right 'bottom-right))
+         #:screen-rows 15 #:screen-cols 24))
+       (node (resolved-node resolved 'single-bottom-right)))
+  (check 'single-node-area-bottom-right
+         (and (= (field node 'col) 21)
+              (= (field node 'row) 13))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'single-hierarchy 'rotary-slider 'standard)
+               (lt:place-in-area
+                'single-hierarchy '(bottom-right top-left center)))
+         #:screen-rows 15 #:screen-cols 24))
+       (node (resolved-node resolved 'single-hierarchy)))
+  (check 'single-node-hierarchical-area
+         (and (= (field node 'col) 89/6)
+              (= (field node 'row) 25/3)
+              (exact? (field node 'col))
+              (exact? (field node 'row)))))
+
+(let* ((resolved
+        (lt:solve
+         (list (lt:node 'single-compatible 'toggle-button 'compact #:row 1)
+               (lt:place-in-area 'single-compatible 'top))
+         #:screen-rows 15 #:screen-cols 24))
+       (node (resolved-node resolved 'single-compatible)))
+  (check 'single-node-area-compatible-hard-anchor
+         (and (= (field node 'col) 11)
+              (= (field node 'row) 1))))
+
+(check 'single-node-area-incompatible-hard-anchor
+       (rejected?
+        (lambda ()
+          (lt:solve
+           (list (lt:node 'single-incompatible 'toggle-button 'compact
+                          #:col 1)
+                 (lt:place-in-area 'single-incompatible 'bottom-right))
+           #:screen-rows 15 #:screen-cols 24))))
 
 (display "topological-layout-test: PASS\n")

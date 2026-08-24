@@ -150,7 +150,7 @@
        (declarations
         (list (lt:align-top 'a 'b)
               (lt:group 'pair #:layout 'horizontal #:cohesion 'strong
-                        #:area '(top-right bottom-left) 'a 'b)))
+                        #:area '(center center) 'a 'b)))
        (normalized
         (normalize-topological-layout (list b a) declarations #:grid grid))
        (entries (field normalized 'entries))
@@ -162,7 +162,7 @@
   (check 'separate-alignment-and-group-declarations
          (and (eq? (field group 'kind) 'group)
               (eq? (field group 'cohesion) 'strong)
-              (equal? (field group 'area) '(top-right bottom-left))))
+              (equal? (field group 'area) '(center center))))
   (check 'forward-reference-and-end-to-end-solve
          (and (= (field resolved-a 'row) (field resolved-b 'row))
               (= (field resolved-b 'col)
@@ -205,7 +205,7 @@
          (lt:align-top 'bridge-a 'bridge-b)
          (lt:group 'bridge-pair #:layout 'horizontal
                    #:cohesion 'strong
-                   #:area '(top-right bottom-left)
+                   #:area '(center center)
                    'bridge-a 'bridge-b)))
        (normalized
         (normalize-topological-layout
@@ -270,6 +270,21 @@
            (list (make <text-button> #:id 'only-node))
            (list (lt:constrain 'missing (lt:right-of 'only-node)))
            #:grid grid))))
+
+(let* ((component (make <text-button> #:id 'normalized-area-node))
+       (normalized
+        (normalize-topological-layout
+         (list component)
+         (list (lt:place-in-area 'normalized-area-node 'top))
+         #:grid grid))
+       (resolved (solve-normalized-topological-layout normalized))
+       (node (entry-by-id resolved 'normalized-area-node)))
+  (check 'node-area-declaration-normalized
+         (and (= (field node 'col) 9)
+              (= (field node 'row) 1)
+              (= (field node 'colSpan) 8)
+              (= (field node 'rowSpan) 3))))
+
 (check 'node-constraints-zero-rejected
        (rejected? (lambda () (lt:constrain 'only-node))))
 (check 'node-constraints-non-symbol-target-rejected

@@ -4,6 +4,7 @@
   #:use-module (generator-app ui-metrics)
   #:export (lt:node
             lt:group
+            lt:place-in-area
             lt:next-right-of
             lt:next-left-of
             lt:next-above
@@ -44,6 +45,30 @@
     (row . ,row)
     (col . ,col)
     (constraints . ,constraints)))
+
+(define area-symbols
+  '(top-left top top-right
+    left center right
+    bottom-left bottom bottom-right))
+
+(define (validate-area-path! owner area)
+  (unless (or (symbol? area)
+              (and (list? area) (not (null? area))))
+    (error "Topological layout area must be a symbol or non-empty proper path"
+           owner area))
+  (let ((path (if (symbol? area) (list area) area)))
+    (unless (every symbol? path)
+      (error "Topological layout area path must contain symbols" owner area))
+    (unless (every (lambda (item) (memq item area-symbols)) path)
+      (error "Invalid topological layout area path" owner area))))
+
+(define (lt:place-in-area node area)
+  (unless (symbol? node)
+    (error "Topological node-area target must be a symbol" node))
+  (validate-area-path! node area)
+  `((kind . node-area)
+    (node . ,node)
+    (area . ,area)))
 
 (define (lt:group id . arguments)
   (unless (symbol? id)
@@ -94,21 +119,7 @@
     (unless (or (not cohesion) (memq cohesion '(strong medium weak)))
       (error "Invalid topological layout group cohesion" id cohesion))
     (when area-seen?
-      (unless (or (symbol? area)
-                  (and (list? area) (not (null? area))))
-        (error "Topological layout group area must be a symbol or non-empty proper path"
-               id area))
-      (let ((path (if (symbol? area) (list area) area)))
-        (unless (every symbol? path)
-          (error "Topological layout group area path must contain symbols"
-                 id area))
-        (unless (every
-                 (lambda (item)
-                   (memq item '(top-left top top-right
-                                left center right
-                                bottom-left bottom bottom-right)))
-                 path)
-          (error "Invalid topological layout group area path" id area))))
+      (validate-area-path! id area))
     (unless (>= (length members) 2)
       (error "Topological layout group requires at least two members"
              id members))
@@ -440,16 +451,36 @@
         (cons 1 (+ screen-size 1))
         (area-path area)))
 
+(define (area-bbox-target-start area-bounds area axis span)
+  (let* ((area-lower (car area-bounds))
+         (area-upper (cdr area-bounds))
+         (area-span (- area-upper area-lower))
+         (area-index (area-axis-index (last (area-path area)) axis)))
+    (case area-index
+      ((0) area-lower)
+      ((1) (+ area-lower (/ (- area-span span) 2)))
+      ((2) (- area-upper span)))))
+
+(define (area-placement-members placement)
+  (if (eq? (field placement 'kind) 'group)
+      (field placement 'members)
+      (list (field placement 'id))))
+
+(define (area-placement-id placement)
+  (if (eq? (field placement 'kind) 'group)
+      (field placement 'id)
+      (field placement 'id)))
+
 ;; Groups remain derived IR objects, never graph vertices. For each hard-valid
-;; candidate, member offsets are frozen relative to the first member and the
-;; reference is bounded so that the derived group center lies in its third.
-(define (area-placement-constraints groups sizes axis distances screen-size)
+;; candidate, group member offsets are frozen relative to the first member.
+;; Group and single-node bounding boxes then share the same exact alignment.
+(define (area-placement-constraints placements sizes axis distances screen-size)
   (fold
-   (lambda (group result)
-     (let ((area (field group 'area)))
+   (lambda (placement result)
+     (let ((area (field placement 'area)))
        (if (not area)
            result
-           (let* ((members (field group 'members))
+           (let* ((members (area-placement-members placement))
                   (reference-id (car members))
                   (reference-position (hashq-ref distances reference-id))
                   (positions
@@ -465,10 +496,11 @@
                   (start (apply min positions))
                   (end (apply max ends))
                   (span (- end start))
-                  (center-offset (+ (- start reference-position) (/ span 2)))
+                  (start-offset (- start reference-position))
                   (area-bounds (resolve-area-path screen-size area axis))
-                  (center-lower (car area-bounds))
-                  (center-upper (cdr area-bounds))
+                  (target-start
+                   (area-bbox-target-start area-bounds area axis span))
+                  (target-reference (- target-start start-offset))
                   (rigid-edges
                    (append-map
                     (lambda (id)
@@ -488,18 +520,18 @@
                               (list 'upper id (+ 1 (- screen-size extent))))))
                     members)))
              (when (> span screen-size)
-               (error "Topological layout group cannot fit logical screen"
-                      (field group 'id) axis span screen-size))
+               (error "Topological layout area target cannot fit logical screen"
+                      (area-placement-id placement) axis span screen-size))
              (list (append (car result) rigid-edges)
                    (append (cadr result)
                            (list
                             (list 'lower reference-id
-                                  (- center-lower center-offset))
+                                  target-reference)
                             (list 'upper reference-id
-                                  (- center-upper center-offset)))
+                                  target-reference))
                            screen-bounds))))))
    (list '() '())
-   groups))
+   placements))
 
 (define (solve-area-axis nodes alignments groups sizes axis screen-size
                          extra-edges)
@@ -509,7 +541,9 @@
         initial
         (let ((placement
                (area-placement-constraints
-                groups sizes axis initial screen-size)))
+                (append groups
+                        (filter (lambda (node) (field node 'area)) nodes))
+                sizes axis initial screen-size)))
           (solve-axis nodes alignments groups sizes axis
                       (append extra-edges (car placement))
                       (cadr placement))))))
@@ -650,6 +684,32 @@
           (field group 'members))))
      groups)))
 
+(define (validate-node-area-placements! placements nodes)
+  (let ((node-ids (map (lambda (node) (field node 'id)) nodes))
+        (targets (map (lambda (placement) (field placement 'node))
+                      placements)))
+    (for-each
+     (lambda (placement)
+       (let ((target (field placement 'node))
+             (area (field placement 'area)))
+         (unless (memq target node-ids)
+           (error "Topological node-area target does not exist" target))
+         (validate-area-path! target area)))
+     placements)
+    (unless (= (length targets)
+               (length (delete-duplicates targets eq?)))
+      (error "Duplicate topological node-area target" targets))))
+
+(define (attach-node-areas nodes placements)
+  (map
+   (lambda (node)
+     (let ((placement
+            (find (lambda (item)
+                    (eq? (field item 'node) (field node 'id)))
+                  placements)))
+       (cons (cons 'area (and placement (field placement 'area))) node)))
+   nodes))
+
 (define (resolved-group-soft-cost group resolved-nodes)
   (let ((cohesion (field group 'cohesion)))
     (if (not cohesion)
@@ -710,20 +770,28 @@
   (unless (list? entries)
     (error "Topological layout input must be a list" entries))
   (unless (every (lambda (entry)
-                   (memq (field entry 'kind) '(node alignment group)))
+                   (memq (field entry 'kind)
+                         '(node alignment group node-area)))
                  entries)
     (error "Invalid topological layout IR entry" entries))
-  (let ((nodes (filter (lambda (entry) (eq? (field entry 'kind) 'node))
-                       entries))
+  (let* ((raw-nodes
+          (filter (lambda (entry) (eq? (field entry 'kind) 'node)) entries))
         (alignments
          (filter (lambda (entry) (eq? (field entry 'kind) 'alignment))
                  entries))
         (groups (filter (lambda (entry) (eq? (field entry 'kind) 'group))
-                        entries)))
-  (validate-node-ids! nodes)
-  (validate-groups! groups nodes)
-  (let ((area-groups (filter (lambda (group) (field group 'area)) groups)))
-    (when (or screen-rows screen-cols (not (null? area-groups)))
+                        entries))
+         (node-area-placements
+          (filter (lambda (entry) (eq? (field entry 'kind) 'node-area))
+                  entries)))
+  (validate-node-ids! raw-nodes)
+  (validate-groups! groups raw-nodes)
+  (validate-node-area-placements! node-area-placements raw-nodes)
+  (let ((nodes (attach-node-areas raw-nodes node-area-placements))
+        (area-groups (filter (lambda (group) (field group 'area)) groups)))
+    (when (or screen-rows screen-cols
+              (not (null? area-groups))
+              (not (null? node-area-placements)))
       (unless (and screen-rows screen-cols)
         (error "Logical screen rows and columns are both required"
                screen-rows screen-cols))
@@ -732,7 +800,7 @@
                    (integer? screen-cols) (exact? screen-cols)
                    (> screen-cols 0))
         (error "Logical screen dimensions must be positive exact integers"
-               screen-rows screen-cols))))
+               screen-rows screen-cols)))
   (let* ((sizes (map (lambda (node)
                        (cons (field node 'id) (node-size node)))
                      nodes))
@@ -781,4 +849,4 @@
                 '()
                 (list
                  `((kind . solver-metadata)
-                   (soft-cost . ,total-soft-cost))))))))
+                   (soft-cost . ,total-soft-cost)))))))))
