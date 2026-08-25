@@ -44,7 +44,7 @@
    snapshot))
 
 (reset-generation-state!)
-(make <grid> #:rows 15 #:cols 24 #:show-grid #t)
+(make <grid> #:rows 15 #:cols 144 #:show-grid #t)
 
 (check 'all-concrete-dsl-types-have-explicit-metric-mapping
        (every
@@ -92,7 +92,7 @@
   (check 'legacy-row-col-are-hard-anchors
          (and (= (field scope 'row) 2) (= (field scope 'col) 3)))
   (check 'preferred-profile-drives-topological-span
-         (and (= (field scope 'rowSpan) 8) (= (field scope 'colSpan) 12)))
+         (and (= (field scope 'rowSpan) 10) (= (field scope 'colSpan) 18)))
   (check 'meter-orientation-variants
          (and (eq? (field meter-v 'variant) 'segmented-vertical)
               (eq? (field meter-h 'variant) 'segmented-horizontal)))

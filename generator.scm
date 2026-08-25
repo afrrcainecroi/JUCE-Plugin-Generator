@@ -1312,6 +1312,21 @@ var id var))
              src-folder
              dst-folder))))
 
+;; Existing projects retain developer-owned files, but generic renderer
+;; support must follow its authoritative YATemplate source.  Keep this list
+;; deliberately narrow: PluginDSP.h and all other project files are excluded.
+(define (synchronize-generator-support-files src-folder dst-folder)
+  (for-each
+   (lambda (relative-path)
+     (let ((source (string-append src-folder "/" relative-path))
+           (destination (string-append dst-folder "/" relative-path)))
+       (unless (and (file-exists? source) (file-exists? destination))
+         (error "Missing generator-owned support file during synchronization"
+                relative-path))
+       (copy-file source destination)))
+   '("Source/KineticLookAndFeel.h"
+     "Source/KineticLookAndFeel.cpp")))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1397,6 +1412,7 @@ var id var))
       ;; (match `(,(AskForRemoveLeave new-name))
       ;; 	(('Update) ;; non faccio nulla il progetto esiste già e sta bene, quindi aggiorno i codici dove serve farlo
       ;;(GenerateC++ g::gen-var dst-folder new-name interface-definitions #t) ;;è un aggiornamento!!
+      (synchronize-generator-support-files src-folder dst-folder)
       (GenerateC++ g::gen-var dst-folder new-name interface-definitions #t #:layout-mode layout-mode #:topology-declarations topology-declarations)
       (display "Programma aggiornato correttamente\n")
       ;;  )

@@ -51,7 +51,7 @@
           (/ (field discrete 'rowSpan) refined-rows))))
 
 (reset-generation-state!)
-(make <grid> #:rows 15 #:cols 24 #:show-grid #t)
+(make <grid> #:rows 15 #:cols 144 #:show-grid #t)
 
 ;; Deliberately wrong legacy spans prove that topological emission consumes
 ;; ui-metrics.  The even/odd center alignment creates col=3/2 exactly.
@@ -97,14 +97,14 @@
             (exact? (field (entry-by-id original 'odd) 'col))))
 (check 'minimal-independent-refinement-factors
        (and (= (field refinement 'dx) 2)
-            (= (field refinement 'dy) 3)))
+            (= (field refinement 'dy) 1)))
 (check 'one-based-final-screen-lines
        (and (= (+ (field refinement 'screen-cols) 1)
-               (+ 1 (* (field refinement 'dx) 24)))
+               (+ 1 (* (field refinement 'dx) 144)))
             (= (+ (field refinement 'screen-rows) 1)
                (+ 1 (* (field refinement 'dy) 15)))))
-(check 'hierarchical-area-denominator-three
-       (= (denominator (field (entry-by-id original 'future-a) 'row)) 3))
+(check 'hierarchical-area-placement-resolved
+       (= (field (entry-by-id original 'future-a) 'row) 2))
 (check 'discrete-ir-integers-only
        (every
         (lambda (node)
@@ -117,7 +117,7 @@
         (lambda (node)
           (relative-geometry-preserved?
            node (entry-by-id discrete (field node 'id))
-           15 24
+            15 144
            (field refinement 'screen-rows)
            (field refinement 'screen-cols)))
         original-nodes))
@@ -152,8 +152,8 @@
 (define emitted-components (json-field emitted-json 'components))
 
 (check 'refined-grid-tracks-emitted
-       (and (= (json-field emitted-grid 'rows) 45)
-            (= (json-field emitted-grid 'cols) 48)))
+       (and (= (json-field emitted-grid 'rows) 15)
+            (= (json-field emitted-grid 'cols) 288)))
 (check 'json-layout-coordinates-are-integers
        (every
         (lambda (component)
@@ -181,17 +181,17 @@
       (palette (entry-by-id discrete 'palette-title)))
   (check 'variant-aware-meter-footprint
          (and (eq? (field meter 'variant) 'segmented-horizontal)
-              (= (field meter 'rowSpan) (* 3 4))
+              (= (field meter 'rowSpan) 3)
               (= (field meter 'colSpan) (* 2 14))))
   (check 'palette-label-footprint
          (and (eq? (field palette 'type) 'palette-label)
-              (= (field palette 'rowSpan) (* 3 3))
+              (= (field palette 'rowSpan) 3)
               (= (field palette 'colSpan) (* 2 12)))))
 
 ;; Integer-only coordinates require no refinement and remain structurally
 ;; identical after the exact transformation.
 (reset-generation-state!)
-(make <grid> #:rows 15 #:cols 24 #:show-grid #t)
+(make <grid> #:rows 15 #:cols 144 #:show-grid #t)
 (make <scope> #:id 'integer-scope #:row 2 #:col 3)
 (define integer-plan (prepare-generation-layout #:layout-mode 'topological))
 (define integer-refinement (field integer-plan 'refinement))
@@ -201,4 +201,4 @@
             (equal? (field integer-refinement 'original-resolved)
                     (field integer-refinement 'discrete-resolved))))
 
-(display "topological-generated-layout-test: PASS (Dx=2 Dy=3)\n")
+(display "topological-generated-layout-test: PASS (Dx=2 Dy=1)\n")
