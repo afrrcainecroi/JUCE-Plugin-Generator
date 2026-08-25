@@ -71,8 +71,7 @@
                (assoc-ref model
                           'processor-reference)))
 
-          (if (or (fft-model)
-                  (oversampling-model))
+          (if (latency-infrastructure-required?)
 
               ;; ==================================================
               ;; HARD BYPASS CON LATENZA FISSA
@@ -725,6 +724,11 @@
 
 (define (fft-enabled?)
   (if (fft-model) #t #f))
+
+;; RealPlugin::getLatencySamples() is a developer contract, not a DSL role.
+;; Its value is known only after the four factor-specific instances have been
+;; prepared, so processor-side fixed-latency support must always be available.
+(define (latency-infrastructure-required?) #t)
 
 (define-public (generate-fft-infrastructure-code)
   (let ((model (fft-model)))
@@ -1658,7 +1662,7 @@ private:
         (oversampling
          (oversampling-model)))
 
-    (if (or fft oversampling)
+    (if (latency-infrastructure-required?)
 
         (string-append
          "
@@ -1727,39 +1731,40 @@ private:
 
     generatedActualLatencySamples = 0;
 
-    const int generatedLatencyChannels =
-        juce::jmax(
-            1,
-            juce::jmax(
-                getTotalNumInputChannels(),
-                getTotalNumOutputChannels()));
-
-    const int generatedDelayBufferSize =
-        generatedMaximumLatencySamples
-        + samplesPerBlock
-        + 1;
-
-
-    generatedDryDelayBuffer.setSize(
-        generatedLatencyChannels,
-        generatedDelayBufferSize,
-        false,
-        true,
-        false);
-
-    generatedWetDelayBuffer.setSize(
-        generatedLatencyChannels,
-        generatedDelayBufferSize,
-        false,
-        true,
-        false);
-
-
-    generatedDryDelayBuffer.clear();
-    generatedWetDelayBuffer.clear();
-
     generatedDryDelayWritePosition = 0;
     generatedWetDelayWritePosition = 0;
+
+    if (generatedMaximumLatencySamples > 0)
+    {
+        const int generatedLatencyChannels =
+            juce::jmax(
+                1,
+                juce::jmax(
+                    getTotalNumInputChannels(),
+                    getTotalNumOutputChannels()));
+
+        const int generatedDelayBufferSize =
+            generatedMaximumLatencySamples
+            + samplesPerBlock
+            + 1;
+
+        generatedDryDelayBuffer.setSize(
+            generatedLatencyChannels,
+            generatedDelayBufferSize,
+            false,
+            true,
+            false);
+
+        generatedWetDelayBuffer.setSize(
+            generatedLatencyChannels,
+            generatedDelayBufferSize,
+            false,
+            true,
+            false);
+
+        generatedDryDelayBuffer.clear();
+        generatedWetDelayBuffer.clear();
+    }
 
 
     // La latenza vista dall'host rimane costante
@@ -1773,8 +1778,7 @@ private:
         "")))
 
 (define-public (generate-latency-runtime-members-code)
-  (if (or (fft-model)
-          (oversampling-model))
+  (if (latency-infrastructure-required?)
 
       "
     // ==========================================================
@@ -1805,8 +1809,7 @@ private:
 (define-public (generate-process-dry-latency-code)
   (if (and
        (role-present? 'wet-dry)
-       (or (fft-model)
-           (oversampling-model)))
+       (latency-infrastructure-required?))
 
       "
     // ==========================================================
@@ -1912,7 +1915,7 @@ int MyPlugin::getDeveloperLatencySamples(
                (assoc-ref oversampling
                           'processor-reference))))
 
-    (if (or fft oversampling)
+    (if (latency-infrastructure-required?)
 
         (string-append
 
@@ -1922,6 +1925,9 @@ int MyPlugin::getDeveloperLatencySamples(
     // ==========================================================
 
     generatedActualLatencySamples = 0;
+
+    if (generatedMaximumLatencySamples > 0)
+    {
 
 "
 
@@ -2141,6 +2147,7 @@ int MyPlugin::getDeveloperLatencySamples(
                 generatedWetDelayWritePosition = 0;
             }
         }
+    }
     }
 
 ")
