@@ -122,7 +122,7 @@
          (and (= (field node 'row) 1)
               (= (field node 'col) 1)
               (= (field node 'rowSpan) 10)
-              (= (field node 'colSpan) 16))))
+              (= (field node 'colSpan) 18))))
 
 ;; Alignment declarations are global IR entries. The first id is the common
 ;; reference; every remaining id is equated to it independently.
@@ -174,10 +174,10 @@
               (lt:node 'b 'scope 'standard)
               (lt:align-center-x 'a 'b)))))
   (check 'align-center-x-integer
-         (and (= (field (resolved-node resolved 'a) 'col) 3)
+         (and (= (field (resolved-node resolved 'a) 'col) 6)
               (= (field (resolved-node resolved 'b) 'col) 1)
               (= (+ (field (resolved-node resolved 'a) 'col) 4)
-                 (+ (field (resolved-node resolved 'b) 'col) 6)))))
+                 (+ (field (resolved-node resolved 'b) 'col) 9)))))
 
 (let* ((resolved
         (lt:solve
@@ -268,8 +268,8 @@
 (let ((node (car (lt:solve (list (lt:node 's 'scope 'standard))))))
   (check 'nonvariant-scope-standard
          (and (not (field node 'variant))
-              (= (field node 'colSpan) 12)
-              (= (field node 'rowSpan) 8))))
+              (= (field node 'colSpan) 18)
+              (= (field node 'rowSpan) 10))))
 
 (let ((node (car (lt:solve
                   (list (lt:node 'm 'meter 'standard #:variant 'analog))))))
@@ -286,14 +286,14 @@
                             #:variant 'segmented-horizontal))))))
   (check 'meter-segmented-horizontal-standard
          (and (= (field node 'colSpan) 14)
-              (= (field node 'rowSpan) 4))))
+              (= (field node 'rowSpan) 3))))
 
 (let ((node
        (car (lt:solve
              (list (lt:node 'm 'meter 'compact
                             #:variant 'segmented-vertical))))))
   (check 'meter-segmented-vertical-compact
-         (and (= (field node 'colSpan) 3)
+         (and (= (field node 'colSpan) 1)
               (= (field node 'rowSpan) 10))))
 
 (check 'unknown-meter-variant
@@ -410,8 +410,8 @@
          (and (= (field (resolved-node resolved 'scope) 'col) 1)
               (= (field (resolved-node resolved 'rotary) 'col) 9)
               (= (field (resolved-node resolved 'wide) 'col) 14)
-              (= (field group 'rowSpan) 8)
-              (= (field group 'colSpan) 25))))
+              (= (field group 'rowSpan) 10)
+              (= (field group 'colSpan) 31))))
 
 (let* ((resolved
         (lt:solve
@@ -424,10 +424,10 @@
        (group (resolved-node resolved 'variant-members)))
   (check 'group-variant-aware-members
          (and (= (field (resolved-node resolved 'scope) 'col) 1)
-              (= (field (resolved-node resolved 'analog) 'col) 13)
-              (= (field (resolved-node resolved 'segments) 'col) 22)
-              (= (field group 'colSpan) 31)
-              (= (field group 'rowSpan) 8))))
+              (= (field (resolved-node resolved 'analog) 'col) 19)
+              (= (field (resolved-node resolved 'segments) 'col) 28)
+              (= (field group 'colSpan) 37)
+              (= (field group 'rowSpan) 10))))
 
 (let ((resolved
        (lt:solve
@@ -438,7 +438,7 @@
   (check 'group-forward-reference
          (and (= (field (resolved-node resolved 'a) 'col) 1)
               (= (field (resolved-node resolved 'b) 'col) 9)
-              (= (field (resolved-node resolved 'c) 'col) 21)
+              (= (field (resolved-node resolved 'c) 'col) 27)
               (equal? (field (resolved-node resolved 'forward-group) 'members)
                       '(a b c)))))
 

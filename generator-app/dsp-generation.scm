@@ -28,11 +28,27 @@
 	    generate-myplugin-developer-latency-declaration-code
 	    ))
 
+(define (scope-model)
+  (role-model 'scope))
+
+(define (scope-tap-points)
+  (let ((model (scope-model)))
+    (if model (assoc-ref model 'tap-points) '())))
+
+(define (scope-has-tap? tap)
+  (and (memq tap (scope-tap-points)) #t))
+
+(define (scope-resource-base tap)
+  (string-append
+   (assoc-ref (scope-model) 'var)
+   (if (eq? tap 'pre-dsp) "PreDsp" "PostDsp")))
+
 (define-public (generate-process-code)
   (string-append
+   (generate-process-input-meter)
    (generate-process-bypass)
    (generate-process-input-gain)
-   (generate-process-input-meter)
+   (generate-process-scope-tap 'pre-dsp)
    (generate-process-wetdry-prefix)
 
    (generate-process-dsp)
@@ -40,9 +56,10 @@
    (generate-process-dry-latency-code)
 
    (generate-process-wetdry-postfix)
+   (generate-process-scope-tap 'post-dsp)
    (generate-process-output-gain)
    (generate-process-output-meter)
-   (generate-process-scope)))
+   ))
 
 (define (generate-process-bypass)
   (let ((model
@@ -126,11 +143,13 @@
             }
         }
 
+~a
         return;
     }
 
 "
-                      ref)
+                      ref
+                      (generate-process-output-meter))
 
               ;; ==================================================
               ;; NESSUNA INFRASTRUTTURA DI LATENZA
@@ -140,10 +159,14 @@
 "
     // HARD BYPASS
     if (value_~a >= 0.5f)
+    {
+~a
         return;
+    }
 
 "
-                      ref)))
+                      ref
+                      (generate-process-output-meter))))
 
         "")))
 
@@ -344,25 +367,28 @@
                   ref))
         "")))
 
-(define (generate-process-scope)
-  (if (role-present? 'scope)
-      "    // SCOPE
+(define (generate-process-scope-tap tap)
+  (if (scope-has-tap? tap)
+      (let ((base (scope-resource-base tap)))
+        (format #f "    // SCOPE ~a TAP
     {
         const float* data = buffer.getReadPointer(0);
         const int numSamples = buffer.getNumSamples();
-        const int step = juce::jmax(1, numSamples / 128);
-        int idx = scopeWriteIdx.load(std::memory_order_relaxed);
+        const int step = juce::jmax(1, (numSamples + 127) / 128);
+        int idx = ~aWriteIdx.load(std::memory_order_relaxed);
 
         for (int i = 0; i < numSamples; i += step)
         {
-            scopeFifo[idx].store(data[i], std::memory_order_relaxed);
+            ~aFifo[idx].store(data[i], std::memory_order_relaxed);
             idx = (idx + 1) % 128;
         }
 
-        scopeWriteIdx.store(idx, std::memory_order_relaxed);
+        ~aWriteIdx.store(idx, std::memory_order_relaxed);
     }
 
 "
+                (if (eq? tap 'pre-dsp) "PRE-DSP" "POST-DSP")
+                base base base))
       ""))
 
 
@@ -555,7 +581,7 @@
    (let ((model (role-model 'input-meter)))
      (if model
          (format #f
-                 "~a.updateLevel(ap.~a.load());~%"
+                 "~a.updateLevel(ap.~a.exchange(0.0f, std::memory_order_relaxed));~%"
                  (assoc-ref model 'var)
                  (meter-peak-var model))
          ""))
@@ -564,19 +590,31 @@
    (let ((model (role-model 'output-meter)))
      (if model
          (format #f
-                 "~a.updateLevel(ap.~a.load());~%"
+                 "~a.updateLevel(ap.~a.exchange(0.0f, std::memory_order_relaxed));~%"
                  (assoc-ref model 'var)
                  (meter-peak-var model))
          ""))
 
    ;; SCOPE
-   (let ((model (role-model 'scope)))
+   (let ((model (scope-model)))
      (if model
-         (format #f
-"~a.fetchFromProcessor(
-    ap.scopeFifo,
-    ap.scopeWriteIdx.load(std::memory_order_relaxed));~%"
-                 (assoc-ref model 'var))
+         (string-append
+          (if (scope-has-tap? 'pre-dsp)
+              (let ((base (scope-resource-base 'pre-dsp)))
+                (format #f
+"~a.fetchPreFromProcessor(
+    ap.~aFifo,
+    ap.~aWriteIdx.load(std::memory_order_relaxed));~%"
+                        (assoc-ref model 'var) base base))
+              "")
+          (if (scope-has-tap? 'post-dsp)
+              (let ((base (scope-resource-base 'post-dsp)))
+                (format #f
+"~a.fetchPostFromProcessor(
+    ap.~aFifo,
+    ap.~aWriteIdx.load(std::memory_order_relaxed));~%"
+                        (assoc-ref model 'var) base base))
+              ""))
          ""))))
 
 
@@ -597,10 +635,13 @@
                  (meter-peak-var model))
          ""))
 
-   (if (role-model 'scope)
-       "std::array<std::atomic<float>, 128> scopeFifo {};
-std::atomic<int> scopeWriteIdx { 0 };
-"
+   (if (scope-has-tap? 'pre-dsp)
+       (let ((base (scope-resource-base 'pre-dsp)))
+         (format #f "std::array<std::atomic<float>, 128> ~aFifo {};~%std::atomic<int> ~aWriteIdx { 0 };~%" base base))
+       "")
+   (if (scope-has-tap? 'post-dsp)
+       (let ((base (scope-resource-base 'post-dsp)))
+         (format #f "std::array<std::atomic<float>, 128> ~aFifo {};~%std::atomic<int> ~aWriteIdx { 0 };~%" base base))
        "")
 
    (generate-oversampling-runtime-members-code)

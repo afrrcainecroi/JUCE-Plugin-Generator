@@ -84,12 +84,12 @@
            (and (eq? (field warning 'kind) 'legacy-span-mismatch)
                 (= (field warning 'legacy-row-span) 99)
                 (= (field warning 'legacy-col-span) 98)
-                (= (field warning 'metric-row-span) 8)
-                (= (field warning 'metric-col-span) 12))))
+                (= (field warning 'metric-row-span) 10)
+                (= (field warning 'metric-col-span) 18))))
   (let ((resolved (solve-normalized-topological-layout normalized)))
     (check 'legacy-spans-not-used-by-solver
-           (and (= (field (entry-by-id resolved 'scope-main) 'rowSpan) 8)
-                (= (field (entry-by-id resolved 'scope-main) 'colSpan) 12)))))
+           (and (= (field (entry-by-id resolved 'scope-main) 'rowSpan) 10)
+                (= (field (entry-by-id resolved 'scope-main) 'colSpan) 18)))))
 
 (let* ((analog (make <meter> #:id 'analog-meter #:style 'analog
                      #:orientation 'horizontal))
@@ -114,10 +114,10 @@
          (and (eq? (field vertical 'variant) 'segmented-vertical)
               (eq? (field horizontal 'variant) 'segmented-horizontal)))
   (check 'segmented-meter-standard-profiles
-         (and (= (field vertical-size 'width) 4)
+         (and (= (field vertical-size 'width) 1)
               (= (field vertical-size 'height) 14)
               (= (field horizontal-size 'width) 14)
-              (= (field horizontal-size 'height) 4))))
+              (= (field horizontal-size 'height) 3))))
 
 (let* ((horizontal
         (normalize-topological-component

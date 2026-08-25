@@ -184,4 +184,21 @@
     (error "Invalid scope grid-style; expected one of (radar minimal)"
            (component:id s)
            (scope:grid-style s)))
+  (let ((taps (scope:tap-points s)))
+    (unless (and (list? taps) (not (null? taps)))
+      (error "Invalid scope tap-points; expected a non-empty list"
+             (component:id s) taps))
+    (unless (every (lambda (tap) (memq tap '(pre-dsp post-dsp))) taps)
+      (error "Invalid scope tap-points; expected pre-dsp and/or post-dsp"
+             (component:id s) taps))
+    (unless (= (length taps) (length (delete-duplicates taps)))
+      (error "Invalid scope tap-points; duplicate taps are not allowed"
+             (component:id s) taps))
+    (unless (<= (length taps) 2)
+      (error "Invalid scope tap-points; at most two taps are supported"
+             (component:id s) taps))
+    (when (= (length taps) 2)
+      (unless (equal? taps '(pre-dsp post-dsp))
+        (error "Invalid dual scope tap order; expected (pre-dsp post-dsp)"
+               (component:id s) taps))))
   #t)

@@ -662,15 +662,15 @@
   (check 'meter-profiles
          (and
           (equal? (ui-profile 'meter 'segmented-vertical 'compact)
-                  '((width . 3) (height . 10)))
+                  '((width . 1) (height . 10)))
           (equal? (ui-profile 'meter 'segmented-vertical 'standard)
-                  '((width . 4) (height . 14)))
+                  '((width . 1) (height . 14)))
           (equal? (ui-profile 'meter 'segmented-vertical 'extended)
-                  '((width . 5) (height . 18)))
+                  '((width . 2) (height . 18)))
           (equal? (ui-profile 'meter 'segmented-horizontal 'compact)
                   '((width . 10) (height . 3)))
           (equal? (ui-profile 'meter 'segmented-horizontal 'standard)
-                  '((width . 14) (height . 4)))
+                  '((width . 14) (height . 3)))
           (equal? (ui-profile 'meter 'segmented-horizontal 'extended)
                   '((width . 18) (height . 5)))
           (equal? (ui-profile 'meter 'analog 'compact)
@@ -761,9 +761,9 @@
          (and (equal? (field metrics 'visual-min)
                       '((width . 8) (height . 6)))
               (equal? (field metrics 'preferred)
-                      '((width . 12) (height . 8)))
+                      '((width . 18) (height . 10)))
               (equal? (field metrics 'useful-max)
-                      '((width . 16) (height . 10)))
+                      '((width . 18) (height . 10)))
               (eq? (field metrics 'visual-min-profile) 'compact)
               (eq? (field metrics 'preferred-profile) 'standard)
               (eq? (field metrics 'useful-max-profile) 'extended)))
@@ -771,9 +771,9 @@
          (and (equal? (ui-profile 'scope 'compact)
                       '((width . 8) (height . 6)))
               (equal? (ui-profile 'scope 'standard)
-                      '((width . 12) (height . 8)))
+                      '((width . 18) (height . 10)))
               (equal? (ui-profile 'scope 'extended)
-                      '((width . 16) (height . 10)))))
+                      '((width . 18) (height . 10)))))
   (check 'scope-natural-geometry
          (equal? natural-geometry
                  '((form . waveform-scope)
@@ -782,7 +782,7 @@
   (check 'scope-capabilities
          (equal? capabilities
                  '(grid-style waveform amplitude-labels is-sharp
-                              glow-multiplier runtime-signal)))
+                              glow-multiplier runtime-signal tap-points)))
   (check 'scope-grid-style-metadata
          (and (equal? (field grid-style 'canonical-values)
                       '(radar minimal))
@@ -793,7 +793,7 @@
                               'footprint-effect)
                        'none))
                 '(grid-style waveform amplitude-labels is-sharp
-                             glow-multiplier runtime-signal)))
+                             glow-multiplier runtime-signal tap-points)))
   (check 'scope-content-does-not-change-profile
          (every (lambda (capability)
                   (and (not (ui-capability-profile
@@ -803,7 +803,7 @@
                              'scope #f (list capability)
                              'minimum-visual-profile))))
                 '(grid-style waveform amplitude-labels is-sharp
-                             glow-multiplier runtime-signal)))
+                             glow-multiplier runtime-signal tap-points)))
   (check 'scope-grid-style-has-no-geometric-variants
          (and (not (field metrics 'variants))
               (not (ui-profile 'scope 'radar 'compact))
@@ -811,9 +811,9 @@
               (equal? (ui-profile 'scope 'compact)
                       '((width . 8) (height . 6)))
               (equal? (ui-profile 'scope 'standard)
-                      '((width . 12) (height . 8)))
+                      '((width . 18) (height . 10)))
               (equal? (ui-profile 'scope 'extended)
-                      '((width . 16) (height . 10)))))
+                      '((width . 18) (height . 10)))))
   (check 'scope-renderer-geometry-metadata
          (and (= (field (field renderer-geometry 'label-region)
                         'fixed-width-px)
@@ -851,9 +851,9 @@
             (equal? (ui-profile 'palette-selector 'standard)
                     '((width . 12) (height . 2)))
             (equal? (ui-profile 'meter 'segmented-vertical 'standard)
-                    '((width . 4) (height . 14)))
+                    '((width . 1) (height . 14)))
             (equal? (ui-profile 'meter 'segmented-horizontal 'standard)
-                    '((width . 14) (height . 4)))
+                    '((width . 14) (height . 3)))
             (equal? (ui-profile 'meter 'analog 'standard)
                     '((width . 9) (height . 7)))))
 

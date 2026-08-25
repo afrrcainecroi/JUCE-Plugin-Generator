@@ -2,25 +2,27 @@
   #:use-module (ice-9 format)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
+  #:use-module (rnrs bytevectors)
   #:export (
-	  ;;slider-properties->cpp
-          slider-normalisable-range->cpp
-          meter-properties->cpp
-          scope-properties->cpp
-          palette-selector-callback->cpp
-          selector-constructor-code
-          slider-scale->cpp
-          bool->cpp
-          slider-kinetic-properties->cpp
-          rotary-kinetic-properties->cpp
-          tick-labels->cpp
-          cpp-string
-          justification->cpp
-          selector-items->cpp
-	  font-style->cpp
-	  choice-items->cpp
-	    
-	  ))
+			      ;;slider-properties->cpp
+			      slider-normalisable-range->cpp
+			      meter-properties->cpp
+			      scope-properties->cpp
+			      palette-selector-callback->cpp
+			      selector-constructor-code
+			      slider-scale->cpp
+			      bool->cpp
+			      slider-kinetic-properties->cpp
+			      rotary-kinetic-properties->cpp
+			      tick-labels->cpp
+			      cpp-string
+			      justification->cpp
+			      selector-items->cpp
+			      font-style->cpp
+			      choice-items->cpp
+			      cpp-utf8-string
+			      
+			      ))
 
 (define (error message . args)
   (scm-error 'misc-error
@@ -189,7 +191,8 @@
   (let ((var             (assoc-ref model 'var))
         (grid-style      (assoc-ref model 'grid-style))
         (is-sharp        (assoc-ref model 'is-sharp))
-        (glow-multiplier (assoc-ref model 'glow-multiplier)))
+        (glow-multiplier (assoc-ref model 'glow-multiplier))
+        (tap-points      (assoc-ref model 'tap-points)))
     (string-append
      (format #f
              "~a.properties.set(\"gridStyle\", \"~a\");~%"
@@ -204,7 +207,12 @@
      (format #f
              "~a.properties.set(\"glowMultiplier\", ~a);~%"
              var
-             glow-multiplier))))
+             glow-multiplier)
+     (format #f
+             "~a.setTapPoints(~a, ~a);~%"
+             var
+             (if (memq 'pre-dsp tap-points) "true" "false")
+             (if (memq 'post-dsp tap-points) "true" "false")))))
 
 (define (palette-selector-callback->cpp model)
   (let ((var
@@ -495,9 +503,9 @@
              var)
 
      (format #f
-             "~a.setText(\"~a\", juce::dontSendNotification);~%"
+             "~a.setText(~a, juce::dontSendNotification);~%"
              var
-             (cpp-string text))
+             (cpp-utf8-string text))
 
      (format #f
              "~a.setFont(juce::FontOptions(~af)~a);~%"
@@ -601,3 +609,19 @@
      items)
     ", ")
    " }"))
+
+(define (cpp-utf8-string value)
+  (let* ((bytes (string->utf8 value))
+         (len   (bytevector-length bytes))
+         (hex   (let loop ((i 0) (out '()))
+                  (if (= i len)
+                      (apply string-append (reverse out))
+                      (loop (+ i 1)
+                            (cons
+                             (format #f "\\x~2,'0X"
+                                     (bytevector-u8-ref bytes i))
+                             out))))))
+    (string-append
+     "juce::String::fromUTF8(\""
+     hex
+     "\")")))

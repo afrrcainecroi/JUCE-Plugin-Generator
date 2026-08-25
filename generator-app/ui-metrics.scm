@@ -1,9 +1,10 @@
 (define-module (generator-app ui-metrics)
   #:use-module (srfi srfi-1)
+  #:use-module (rnrs bytevectors)
   #:export (register-ui-metrics!
-            ui-metrics
-            ui-profile
-            ui-capability-profile))
+			      ui-metrics
+			      ui-profile
+			      ui-capability-profile))
 
 ;; Intrinsic UI metrics are registered by TYPE. They do not encode ROLE,
 ;; instance PROPERTY values, RESOURCE identities, or layout decisions.
@@ -702,30 +703,30 @@
        (height . #f)))
    (variants
     . ((segmented-vertical
-        . ((visual-min . ((width . 3) (height . 10)))
-           (preferred . ((width . 4) (height . 14)))
-           (useful-max . ((width . 5) (height . 18)))
+        . ((visual-min . ((width . 1) (height . 10)))
+           (preferred . ((width . 1) (height . 14)))
+           (useful-max . ((width . 2) (height . 18)))
            (visual-min-profile . compact)
            (preferred-profile . standard)
            (useful-max-profile . extended)
            (profiles
-            . ((compact . ((width . 3) (height . 10)))
-               (standard . ((width . 4) (height . 14)))
-               (extended . ((width . 5) (height . 18)))))
+            . ((compact . ((width . 1) (height . 10)))
+               (standard . ((width . 1) (height . 14)))
+               (extended . ((width . 2) (height . 18)))))
            (natural-geometry
             . ((form . segmented-meter) (orientation . vertical)))
            (capabilities
             . (scale-type scale-labels num-segments level enabled))))
        (segmented-horizontal
         . ((visual-min . ((width . 10) (height . 3)))
-           (preferred . ((width . 14) (height . 4)))
+           (preferred . ((width . 14) (height . 3)))
            (useful-max . ((width . 18) (height . 5)))
            (visual-min-profile . compact)
            (preferred-profile . standard)
            (useful-max-profile . extended)
            (profiles
             . ((compact . ((width . 10) (height . 3)))
-               (standard . ((width . 14) (height . 4)))
+               (standard . ((width . 14) (height . 3)))
                (extended . ((width . 18) (height . 5)))))
            (natural-geometry
             . ((form . segmented-meter) (orientation . horizontal)))
@@ -781,22 +782,22 @@
        (width . #f)
        (height . #f)))
    (visual-min . ((width . 8) (height . 6)))
-   (preferred . ((width . 12) (height . 8)))
-   (useful-max . ((width . 16) (height . 10)))
+   (preferred . ((width . 18) (height . 10)))
+   (useful-max . ((width . 18) (height . 10)))
    (visual-min-profile . compact)
    (preferred-profile . standard)
    (useful-max-profile . extended)
    (profiles
     . ((compact . ((width . 8) (height . 6)))
-       (standard . ((width . 12) (height . 8)))
-       (extended . ((width . 16) (height . 10)))))
+       (standard . ((width . 18) (height . 10)))
+       (extended . ((width . 18) (height . 10)))))
    (natural-geometry
     . ((form . waveform-scope)
        (orientation . horizontal)
        (aspect-class . moderately-panoramic)))
    (capabilities
     . (grid-style waveform amplitude-labels is-sharp glow-multiplier
-                  runtime-signal))
+                  runtime-signal tap-points))
    (content-dependent
     . ((grid-style
         . ((canonical-values . (radar minimal))
@@ -807,7 +808,8 @@
            (classification . structural-renderer-content)))
        (is-sharp . ((footprint-effect . none)))
        (glow-multiplier . ((footprint-effect . none)))
-       (runtime-signal . ((footprint-effect . none)))))
+       (runtime-signal . ((footprint-effect . none)))
+       (tap-points . ((footprint-effect . none)))))
    ;; Descriptive renderer geometry only. These fixed pixel regions do not
    ;; alter logical layout profiles and are not consumed by layout.
    (renderer-geometry

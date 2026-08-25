@@ -93,8 +93,9 @@
  (generator-app code-generator)
  (generator-app generation-state)
  (generator-app generation-orchestration)
-(generator-app topological-layout)
-(generator-app topological-normalizer)
+ (generator-app topological-layout)
+ (generator-app topological-normalizer)
+ (generator-app dsl-model)
  )
 
 ;;
@@ -1569,491 +1570,432 @@ var id var))
 
 
 
+
+
+;; ================================================================
+;; REAL GENERIC INTERFACE
+;; Automatic topological layout
+;; ================================================================
+
+
 (define (NewGeneric-interface dst-folder new-name)
-
-  ;; ============================================================
-  ;; SCREEN / GRID LOGICA
-  ;; ============================================================
-
-  (make <screen>
-        #:ratio 1.5
-        #:width 1000)
-
-  (make <grid>
-        #:rows 24
-        #:cols 48
-        #:show-grid #f)
-
-  ;; ============================================================
-  ;; TITLE
-  ;; metric preferred: 12 x 3
-  ;; ============================================================
-
-  (make <palette-label>
-    #:id "palette-title"
-    #:text "TOPOLOGICAL LAYOUT"
-    #:justification 'centred
-
-    ;; volutamente falsi
-    #:row-span 1
-    #:col-span 1)
-
-  ;; ============================================================
-  ;; MAIN METER
-  ;; segmented-horizontal preferred: 14 x 4
-  ;; ============================================================
-
-  (make <meter>
-    #:id "meter-main"
-
-    #:style 'segmented
-    #:orientation 'horizontal
-    #:scale-type 'db
-
-    #:range-min -60.0
-    #:range-max 6.0
-    #:num-segments 20
-
-    #:row-span 1
-    #:col-span 1)
-
-  ;; ============================================================
-  ;; SCOPE
-  ;; preferred: 12 x 8
-  ;; ============================================================
-
-  (make <scope>
-    #:id "scope-main"
-    #:role 'scope
-
-    #:grid-style 'radar
-    #:is-sharp #f
-    #:glow-multiplier 1.0
-
-    #:row-span 1
-    #:col-span 1)
-
-  ;; ============================================================
-  ;; GAIN
-  ;; rotary preferred: 7 x 7
-  ;; ============================================================
-
-  (make <rotary-slider>
-    #:id "gain"
-
-    #:parameter-id "demoGain"
-    #:parameter-name "Demo Gain"
-    #:processor-reference "demoGain"
-    #:version-hint 1
-
-    #:title "GAIN"
-
-    #:min -24.0
-    #:max 24.0
-    #:default 0.0
-    #:interval 0.1
-
-    #:show-value #t
-    #:show-ticks #t
-    #:show-labels #t
-    #:tick-count 5
-    #:tick-mode 'all
-    #:tick-labels '("-24" "-12" "0" "+12" "+24")
-
-    #:row-span 1
-    #:col-span 1)
-
-  ;; ============================================================
-  ;; DRIVE
-  ;; horizontal linear preferred: 14 x 4
-  ;; ============================================================
-
-  (make <linear-slider>
-    #:id "drive"
-
-    #:parameter-id "demoDrive"
-    #:parameter-name "Demo Drive"
-    #:processor-reference "demoDrive"
-    #:version-hint 1
-
-    #:orientation 'horizontal
-    #:title "DRIVE"
-
-    #:min 0.0
-    #:max 100.0
-    #:default 50.0
-    #:interval 1.0
-
-    #:show-value #t
-    #:show-ticks #t
-    #:show-labels #t
-    #:tick-count 5
-    #:tick-mode 'all
-    #:tick-labels '("0" "25" "50" "75" "100")
-
-    #:row-span 1
-    #:col-span 1)
-
-  ;; ============================================================
-  ;; SELECTOR
-  ;; preferred: 12 x 2
-  ;; ============================================================
-
-  (make <selector>
-    #:id "selector-main"
-
-    #:items '("LOW" "NORMAL" "HIGH")
-    #:default-index 2
-
-    #:row-span 1
-    #:col-span 1)
-
-  ;; ============================================================
-  ;; MODE
-  ;; text-button preferred: 8 x 3
-  ;; ============================================================
-
-  (make <text-button>
-    #:id "mode"
-    #:text "MODE"
-
-    #:row-span 1
-    #:col-span 1))
-
-(define pppbuttavia-topology
-  (list
-   (lt:place-in-area 'palette-title 'top)
-
-(lt:group 'main-strip
-  #:layout 'horizontal
-  #:cross-align 'center
-  #:gap 1
-  #:area 'center
-  'meter-main 'scope-main 'gain)
-
-(lt:group 'bottom-strip
-  #:layout 'horizontal
-  #:cross-align 'center
-  #:gap 1
-  #:area 'bottom
-  'drive 'selector-main 'mode)
-   
-
-   (lt:align-center-x 'gain 'mode)))
-
-(define (NewGeneric-interface-old dst-folder new-name)
 
   ;; ============================================================
   ;; SCREEN / GRID
   ;; ============================================================
 
   (make <screen>
-    #:ratio (/ (+ 1.0 (sqrt 5.0)) 2.0)
-    #:width 800)
+    #:ratio 1.45
+    #:width 980)
 
   (make <grid>
-    #:rows 24
-    #:cols 24
-    #:show-grid #t)
+    #:rows 32
+    #:cols 48
+    #:show-grid #f)
 
-  (make <rotary-slider>
-    #:id "Input Gain"
+  ;; ============================================================
+  ;; TITLE
+  ;; ============================================================
+
+  (make <palette-label>
+    #:id "plugin-title"
+    #:text new-name
+    #:justification 'centred
+    #:font-size 26.0
+    #:row-span 1
+    #:col-span 1)
+
+  ;; ============================================================
+  ;; FOOTER LEFT
+  ;; ============================================================
+
+  (make <link>
+    #:id "site-link"
+    #:text "https://www.aacf-music.eu/"
+    #:url "https://www.aacf-music.eu/"
+    #:font-size 10.0
+    #:justification 'bottom-left
+    #:row-span 1
+    #:col-span 1)
+
+  ;; ============================================================
+  ;; FOOTER RIGHT
+  ;; ============================================================
+
+  (make <footer>
+    #:id "copyright-footer"
+    #:text "© 2026 Antonio & Franco Arcieri - all rights reserved"
+    #:font-size 10.0
+    #:justification 'bottom-right
+    #:row-span 1
+    #:col-span 1)
+
+  ;; ============================================================
+  ;; THEME
+  ;; ============================================================
+
+  (make <palette-label>
+    #:id "theme-label"
+    #:text "THEME"
+    #:font-size 15.0
+    #:justification 'centred
+    #:row-span 1
+    #:col-span 1)
+
+  ;; Se il tuo progetto supporta realmente <palette-selector>,
+  ;; preferiscilo al selector generico.
+  (make <palette-selector>
+    #:id "theme-selector"
+    #:items *kinetic-palettes*
+    #:default-index 3
+    #:row-span 1
+    #:col-span 1)
+
+  ;; ============================================================
+  ;; INPUT GAIN - vertical slider
+  ;; ============================================================
+
+  (make <linear-slider>
+    #:id "input-gain"
     #:role 'input-gain
-
     #:parameter-id "inputGain"
     #:parameter-name "Input Gain"
     #:processor-reference "inputGain"
     #:version-hint 1
-
+    #:orientation 'vertical
     #:title "INPUT GAIN"
-
     #:min -24.0
     #:max 24.0
     #:default 0.0
     #:interval 0.1
-
     #:scale 'linear
     #:value-type 'default
     #:suffix " dB"
-
     #:show-value #t
     #:show-ticks #t
     #:show-labels #t
     #:tick-count 5
     #:tick-mode 'all
     #:tick-labels '("-24" "-12" "0" "+12" "+24")
-
-    #:row 16
-    #:col 1
-    #:row-span 7
-    #:col-span 6)
-
-  (make <rotary-slider>
-    #:id "Output Gain"
-    #:role 'output-gain
-
-    #:parameter-id "outputGain"
-    #:parameter-name "Output Gain"
-    #:processor-reference "outputGain"
-    #:version-hint 1
-
-    #:title "OUTPUT GAIN"
-
-    #:min -24.0
-    #:max 24.0
-    #:default 0.0
-    #:interval 0.1
-
-    #:scale 'linear
-    #:value-type 'default
-    #:suffix " dB"
-
-    #:show-value #t
-    #:show-ticks #t
-    #:show-labels #t
-    #:tick-count 5
-    #:tick-mode 'all
-    #:tick-labels '("-24" "-12" "0" "+12" "+24")
-
-    #:row 16
-    #:col 21
-    #:row-span 7
-    #:col-span 6)
-  
+    #:row-span 1
+    #:col-span 1)
 
   ;; ============================================================
   ;; INPUT METER
   ;; ============================================================
 
   (make <meter>
-    #:id "Input Level"
+    #:id "input-meter"
     #:role 'input-meter
-
     #:style 'segmented
     #:orientation 'vertical
     #:scale-type 'db
     #:is-sharp #f
-    #:glow-multiplier 0.6
-    #:range-min -60.0
-    #:range-max 6.0
-    #:num-segments 30
+    #:glow-multiplier 0.8
+    #:range-min -48.0
+    #:range-max 0.0
+    #:num-segments 24
     #:tick-mode 'all
-
-    #:row 3
-    #:col 1
-    #:row-span 14
-    #:col-span 2
-    #:margin-tb 4
-    #:margin-lr 4)
-
-
-  ;; ============================================================
-  ;; OUTPUT METER
-  ;; ============================================================
-
-  (make <meter>
-    #:id "Output Level"
-    #:role 'output-meter
-
-    #:style 'segmented
-    #:orientation 'vertical
-    #:scale-type 'db
-    #:is-sharp #f
-    #:glow-multiplier 0.6
-    #:range-min -60.0
-    #:range-max 6.0
-    #:num-segments 30
-    #:tick-mode 'all
-
-    #:row 3
-    #:col 21
-    #:row-span 14
-    #:col-span 2
-    #:margin-tb 4
-    #:margin-lr 4)
-
-  
+    #:row-span 1
+    #:col-span 1)
 
   ;; ============================================================
   ;; SCOPE
   ;; ============================================================
 
   (make <scope>
-    #:id "Wave Monitor"
+    #:id "scope-main"
     #:role 'scope
-
+    #:tap-points '(pre-dsp post-dsp)
     #:grid-style 'radar
     #:is-sharp #f
     #:glow-multiplier 1.2
+    #:row-span 1
+    #:col-span 1)
 
-    #:row 3
-    #:col 4
-    #:row-span 9
-    #:col-span 16
-    #:margin-tb 4
-    #:margin-lr 4)
+  ;; ============================================================
+  ;; OUTPUT METER
+  ;; ============================================================
 
+  (make <meter>
+    #:id "output-meter"
+    #:role 'output-meter
+    #:style 'segmented
+    #:orientation 'vertical
+    #:scale-type 'db
+    #:is-sharp #f
+    #:glow-multiplier 0.8
+    #:range-min -48.0
+    #:range-max 0.0
+    #:num-segments 24
+    #:tick-mode 'all
+    #:row-span 1
+    #:col-span 1)
+
+  ;; ============================================================
+  ;; OUTPUT GAIN - vertical slider
+  ;; ============================================================
+
+  (make <linear-slider>
+    #:id "output-gain"
+    #:role 'output-gain
+    #:parameter-id "outputGain"
+    #:parameter-name "Output Gain"
+    #:processor-reference "outputGain"
+    #:version-hint 1
+    #:orientation 'vertical
+    #:title "OUTPUT GAIN"
+    #:min -24.0
+    #:max 24.0
+    #:default 0.0
+    #:interval 0.1
+    #:scale 'linear
+    #:value-type 'default
+    #:suffix " dB"
+    #:show-value #t
+    #:show-ticks #t
+    #:show-labels #t
+    #:tick-count 5
+    #:tick-mode 'all
+    #:tick-labels '("-24" "-12" "0" "+12" "+24")
+    #:row-span 1
+    #:col-span 1)
 
   ;; ============================================================
   ;; WET / DRY
   ;; ============================================================
 
   (make <linear-slider>
-    #:id "Wet Dry"
+    #:id "wet-dry"
     #:role 'wet-dry
-
     #:parameter-id "wetdry"
     #:parameter-name "Wet Dry"
     #:processor-reference "wetdry"
     #:version-hint 1
-
     #:orientation 'horizontal
     #:title "WET / DRY"
-
     #:min 0.0
     #:max 100.0
     #:default 100.0
     #:interval 1.0
-
     #:scale 'linear
     #:value-type 'default
     #:suffix " %"
-
-    #:show-value #t
+    #:show-value #f
     #:show-ticks #t
     #:show-labels #t
     #:tick-count 5
     #:tick-mode 'all
-
-    #:tick-labels
-    '("DRY" "25" "50" "75" "WET")
-
-    #:row 13
-    #:col 5
-    #:row-span 3
-    #:col-span 14)
-
+    #:tick-labels '("DRY" "25" "50" "75" "WET")
+    #:row-span 1
+    #:col-span 1)
 
   ;; ============================================================
   ;; OVERSAMPLING
   ;; ============================================================
-  (make <rotary-slider>
-    #:id "Oversampling"
-    #:role 'oversampling
 
+  (make <rotary-slider>
+    #:id "oversampling"
+    #:role 'oversampling
     #:parameter-id "oversampling"
     #:parameter-name "Oversampling"
     #:processor-reference "oversampling"
     #:version-hint 1
-
     #:title "OVERSAMPLING"
-
     #:min 0.0
     #:max 3.0
     #:default 0.0
     #:interval 1.0
-
     #:scale 'linear
     #:value-type 'default
     #:suffix ""
-
     #:show-value #t
     #:show-ticks #t
     #:show-labels #t
     #:tick-count 4
     #:tick-mode 'all
-
-    #:tick-labels
-    '("OFF" "2x" "4x" "8x")
-
-    #:row 16
-    #:col 4
-    #:row-span 7
-    #:col-span 7)
-  
-
+    #:tick-labels '("OFF" "2x" "4x" "8x")
+    #:row-span 1
+    #:col-span 1)
 
   ;; ============================================================
   ;; FFT SIZE
   ;; ============================================================
 
   (make <rotary-slider>
-    #:id "FFT Size"
+    #:id "fft-size"
     #:role 'fft-size
-
     #:parameter-id "fftSize"
     #:parameter-name "FFT Size"
     #:processor-reference "fftSize"
     #:version-hint 1
-
     #:title "FFT SIZE"
-
     #:min 0.0
     #:max 6.0
     #:default 0.0
     #:interval 1.0
-
     #:scale 'linear
     #:value-type 'default
     #:suffix ""
-
     #:show-value #t
     #:show-ticks #t
     #:show-labels #t
     #:tick-count 7
     #:tick-mode 'all
+    #:tick-labels '("OFF" "256" "512" "1024" "2048" "4096" "8192")
+    #:row-span 1
+    #:col-span 1)
 
-    #:tick-labels
-    '("OFF"
-      "256"
-      "512"
-      "1024"
-      "2048"
-      "4096"
-      "8192")
+  ;; ============================================================
+  ;; BYPASS LABELS
+  ;; ============================================================
 
-    #:row 16
-    #:col 13
-    #:row-span 7
-    #:col-span 8)
+  ;; (make <label>
+  ;;   #:id "bypass-label"
+  ;;   #:text "BYPASS"
+  ;;   #:font-size 12.0
+  ;;   #:justification 'centred
+  ;;   #:row-span 1
+  ;;   #:col-span 1)
+
+  ;; (make <label>
+  ;;   #:id "dsp-bypass-label"
+  ;;   #:text "DSP BYPASS"
+  ;;   #:font-size 12.0
+  ;;   #:justification 'centred
+  ;;   #:row-span 1
+  ;;   #:col-span 1)
+
+  ;; ============================================================
+  ;; BYPASS BUTTONS
+  ;; ============================================================
 
   (make <normal-toggle-button>
-    #:id "Bypass"
+    #:id "bypass"
+    #:text "BYPASS"
+    #:default-state #f
     #:role 'bypass
-
     #:parameter-id "bypass"
     #:parameter-name "Bypass"
     #:processor-reference "bypass"
     #:version-hint 1
-
-    #:title "BYPASS"
-
+    #:title ""
     #:default 0.0
-
-    #:row 21
-    #:col 4
-    #:row-span 2
-    #:col-span 5)
+    #:row-span 1
+    #:col-span 1)
 
   (make <normal-toggle-button>
-    #:id "DSP Bypass"
+    #:id "dsp-bypass"
+    #:text "DSP BYPASS"
+    #:default-state #f
     #:role 'dsp-bypass
-
     #:parameter-id "dspBypass"
     #:parameter-name "DSP Bypass"
     #:processor-reference "dspBypass"
     #:version-hint 1
-
-    #:title "DSP BYPASS"
-
+    #:title ""
     #:default 0.0
+    #:row-span 1
+    #:col-span 1))
 
-    #:row 21
-    #:col 10
-    #:row-span 2
-    #:col-span 5)
 
-  )
+(define pppbuttavia-topology
+  (list
+
+   ;; ============================================================
+   ;; HEADER
+   ;; ============================================================
+
+   (lt:place-in-area 'plugin-title 'top)
+
+   ;; ============================================================
+   ;; MAIN CENTER
+   ;; ============================================================
+
+   (lt:place-in-area 'scope-main '(center top))
+
+   ;; ============================================================
+   ;; LEFT AUDIO SIDE
+   ;; ============================================================
+
+   (lt:group 'left-audio-strip
+     #:layout 'horizontal
+     #:cross-align 'center
+     #:gap 0
+     #:area '(left)
+     'input-meter
+     'input-gain)
+
+   ;; ============================================================
+   ;; RIGHT AUDIO SIDE
+   ;; ============================================================
+
+   (lt:group 'right-audio-strip
+     #:layout 'horizontal
+     #:cross-align 'center
+     #:gap 0
+     #:area '(right)
+     'output-gain
+     'output-meter)
+
+   ;; ============================================================
+   ;; BOTTOM CONTROL STRIP
+   ;; ============================================================
+
+   (lt:group 'control-strip
+	     #:layout 'horizontal
+	     #:cross-align 'end
+	     #:gap 2
+	     #:area '(bottom top)
+	     'wet-dry
+	     'oversampling
+	     'fft-size
+	     'bypass
+	     'dsp-bypass)
+   ;; ============================================================
+   ;; THEME AREA
+   ;; ============================================================
+
+   (lt:group 'theme-strip
+     #:layout 'vertical
+     #:cross-align 'center
+     #:gap 0
+     #:area '(top-right top)
+     'theme-label
+     'theme-selector)
+
+   ;; ============================================================
+   ;; SWITCH LABEL STRIP
+   ;; ============================================================
+
+   ;; (lt:group 'switch-label-strip
+   ;; 	     #:layout 'horizontal
+   ;; 	     #:cross-align 'start
+   ;; 	     #:gap 4
+   ;; 	     #:area '(bottom-right right)
+   ;; 	     'bypass-label
+   ;; 	     'dsp-bypass-label)
+
+   ;; ;; Buttons below their labels
+   ;; (lt:constrain 'bypass (lt:next-below 'bypass-label))
+   ;; (lt:constrain 'dsp-bypass (lt:next-below 'dsp-bypass-label))
+
+   ;; ;; Center each button under its own label
+   ;; (lt:align-center-x 'bypass-label 'bypass)
+   ;; (lt:align-center-x 'dsp-bypass-label 'dsp-bypass)
+
+   ;; ============================================================
+   ;; FOOTER
+   ;; ============================================================
+
+   (lt:place-in-area 'site-link 'bottom-left)
+   (lt:place-in-area 'copyright-footer 'bottom-right)
+   (lt:align-bottom 'site-link 'copyright-footer)))
+
+
+
+
+
 
 (define-public (hard-reload-project)
   (display "Svuotamento cache di Guile...\n")

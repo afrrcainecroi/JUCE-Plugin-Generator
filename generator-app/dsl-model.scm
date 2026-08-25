@@ -123,7 +123,8 @@
 	    ;; proprietà grafiche del KineticScope
 	    (grid-style 'radar)
 	    (is-sharp #f)
-	    (glow-multiplier 1.0))
+	    (glow-multiplier 1.0)
+	    (tap-points '(post-dsp)))
 	   #:code
 	   (register-component! this))
 
@@ -297,7 +298,7 @@
       #:margin-tb margin-tb-link
       #:margin-lr margin-lr-link)))
 
-(define *kinetic-palettes*
+(define-public *kinetic-palettes*
   '("Cyan (Cyberpunk)"
     "Plasma (Purple)"
     "Gold (Amber)"
@@ -568,7 +569,8 @@
    (next-method)
    `((grid-style      . ,(scope:grid-style s))
      (is-sharp        . ,(scope:is-sharp s))
-     (glow-multiplier . ,(scope:glow-multiplier s)))))
+     (glow-multiplier . ,(scope:glow-multiplier s))
+     (tap-points      . ,(scope:tap-points s)))))
 
 
 ;; ======================================================================

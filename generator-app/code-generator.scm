@@ -123,6 +123,7 @@
                scope:grid-style
                scope:is-sharp
                scope:glow-multiplier
+               scope:tap-points
                <header-footer>
                header-footer:id
                header-footer:title-header
