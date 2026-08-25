@@ -57,14 +57,20 @@
 ;; ui-metrics.  The even/odd center alignment creates col=3/2 exactly.
 (make <text-button> #:id 'even #:row 1 #:col 1
       #:row-span 91 #:col-span 92)
-(make <rotary-slider> #:id 'odd #:row-span 93 #:col-span 94)
+(make <rotary-slider> #:id 'odd #:row-span 93 #:col-span 94
+      #:parameter-id "odd" #:parameter-name "Odd"
+      #:processor-reference "odd")
 (make <meter> #:id 'meter-h #:style 'segmented #:orientation 'horizontal
       #:row 10 #:col 1 #:row-span 95 #:col-span 96)
 (make <palette-label> #:id 'palette-title #:text "Theme"
       #:row 10 #:col 15 #:row-span 97 #:col-span 98)
 (make <normal-toggle-button> #:id 'future-b
+      #:parameter-id "futureB" #:parameter-name "Future B"
+      #:processor-reference "futureB"
       #:row-span 89 #:col-span 88)
 (make <normal-toggle-button> #:id 'future-a
+      #:parameter-id "futureA" #:parameter-name "Future A"
+      #:processor-reference "futureA"
       #:row-span 87 #:col-span 86)
 
 (define declarations

@@ -49,9 +49,11 @@
 (define (register-runtime-fixture taps suffix)
   (reset-generation-state!)
   (make <linear-slider> #:id (string-append "input-gain-" suffix) #:role 'input-gain
+        #:parameter-id "inputGain" #:parameter-name "Input Gain"
         #:processor-reference "inputGain")
   (make <scope> #:id (string-append "scope-main-" suffix) #:role 'scope #:tap-points taps)
   (make <linear-slider> #:id (string-append "output-gain-" suffix) #:role 'output-gain
+        #:parameter-id "outputGain" #:parameter-name "Output Gain"
         #:processor-reference "outputGain")
   (make <meter> #:id (string-append "output-meter-" suffix)
         #:role 'output-meter))

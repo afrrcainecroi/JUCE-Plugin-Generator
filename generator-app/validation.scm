@@ -27,6 +27,25 @@
       (error "Component without C++ identifier" model))
     #t))
 
+(define (validate-required-parameter-binding! component
+                                                parameter-id
+                                                parameter-name
+                                                processor-reference)
+  (for-each
+   (lambda (field)
+     (let ((name (car field))
+           (value (cdr field)))
+       (unless (and (string? value)
+                    (not (string-null? value)))
+         (error "Parameter-generating component requires a non-empty string binding field"
+                (component:id component)
+                name
+                value))))
+   `((parameter-id . ,parameter-id)
+     (parameter-name . ,parameter-name)
+     (processor-reference . ,processor-reference)))
+  #t)
+
 (define-method (validate-component! (b <button>))
   (unless (string? (button:text b))
     (error "Button text must be a string"
@@ -35,6 +54,11 @@
 
 (define-method (validate-component! (b <toggle-button>))
   (next-method)
+  (validate-required-parameter-binding!
+   b
+   (toggle-button:parameter-id b)
+   (toggle-button:parameter-name b)
+   (toggle-button:processor-reference b))
   (unless (boolean? (toggle-button:default-state b))
     (error "Toggle button default-state must be boolean"
            (component:id b)))
@@ -112,6 +136,11 @@
     #t))
 
 (define-method (validate-component! (s <slider>))
+  (validate-required-parameter-binding!
+   s
+   (slider:parameter-id s)
+   (slider:parameter-name s)
+   (slider:processor-reference s))
   (let ((min (slider:min s))
         (max (slider:max s))
         (default (slider:default s))

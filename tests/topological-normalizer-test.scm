@@ -27,11 +27,17 @@
   (make <scope> #:id 'scope-main #:row 2 #:col 3
         #:row-span 99 #:col-span 98))
 (define rotary
-  (make <rotary-slider> #:id 'gain #:row 4 #:col 5))
+  (make <rotary-slider> #:id 'gain #:row 4 #:col 5
+        #:parameter-id "gain" #:parameter-name "Gain"
+        #:processor-reference "gain"))
 (define toggle
-  (make <normal-toggle-button> #:id 'enabled))
+  (make <normal-toggle-button> #:id 'enabled
+        #:parameter-id "enabled" #:parameter-name "Enabled"
+        #:processor-reference "enabled"))
 (define bypass
-  (make <bypass-switch> #:id 'bypass))
+  (make <bypass-switch> #:id 'bypass
+        #:parameter-id "bypass" #:parameter-name "Bypass"
+        #:processor-reference "bypass"))
 
 (check 'explicit-real-dsl-type-mapping
        (and (eq? (dsl-component->metric-type scope) 'scope)
@@ -122,10 +128,14 @@
 (let* ((horizontal
         (normalize-topological-component
          (make <linear-slider> #:id 'horizontal-slider
+               #:parameter-id "horizontal" #:parameter-name "Horizontal"
+               #:processor-reference "horizontal"
                #:orientation 'horizontal)))
        (vertical
         (normalize-topological-component
          (make <linear-slider> #:id 'vertical-slider
+               #:parameter-id "vertical" #:parameter-name "Vertical"
+               #:processor-reference "vertical"
                #:orientation 'vertical))))
   (check 'linear-slider-existing-variant-information
          (and (eq? (field horizontal 'variant) 'horizontal)
@@ -145,8 +155,10 @@
   (check 'string-logical-id-preserved-losslessly
          (eq? (field node 'id) 'logical.scope)))
 
-(let* ((a (make <normal-toggle-button> #:id 'a))
-       (b (make <normal-toggle-button> #:id 'b))
+(let* ((a (make <normal-toggle-button> #:id 'a
+                #:parameter-id "a" #:parameter-name "A" #:processor-reference "a"))
+       (b (make <normal-toggle-button> #:id 'b
+                #:parameter-id "b" #:parameter-name "B" #:processor-reference "b"))
        (declarations
         (list (lt:align-top 'a 'b)
               (lt:group 'pair #:layout 'horizontal #:cohesion 'strong
@@ -169,8 +181,12 @@
                  (+ (field resolved-a 'col) (field resolved-a 'colSpan)))
               (equal? (field resolved-group 'members) '(a b)))))
 
-(let* ((a (make <normal-toggle-button> #:id 'simple-a))
-       (b (make <normal-toggle-button> #:id 'simple-b))
+(let* ((a (make <normal-toggle-button> #:id 'simple-a
+                #:parameter-id "simpleA" #:parameter-name "Simple A"
+                #:processor-reference "simpleA"))
+       (b (make <normal-toggle-button> #:id 'simple-b
+                #:parameter-id "simpleB" #:parameter-name "Simple B"
+                #:processor-reference "simpleB"))
        (normalized
         (normalize-topological-layout
          (list a b)
