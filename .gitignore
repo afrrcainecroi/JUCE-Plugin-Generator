@@ -39,5 +39,8 @@ generator-app/*
 !generator-app/Compila.sh
 !generator-app/Makefile
 
+!docs/
+!docs/**
+
 # Eventuale configurazione Emacs realmente utile al progetto
 !.dir-locals.el
