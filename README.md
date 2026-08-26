@@ -1,991 +1,239 @@
-## License
-
-This project is licensed under the MIT License.
-
-Copyright (c) 2025- Franco Arcieri (afrrcainecroi).
-
 # JUCE Plugin Generator
 
-Generatore di plugin JUCE scritto in Guile/Scheme.
+JUCE Plugin Generator is a Scheme-based generator for JUCE audio-plugin projects. A declarative GOOPS DSL describes UI components, semantic roles, APVTS parameters, properties, and topological relationships; the generator produces JUCE project wiring and DSP infrastructure while the effect developer implements the algorithm in developer-owned `PluginDSP.h`.
 
-Il progetto descrive tramite una DSL Scheme:
+## What it is
 
-- componenti GUI;
-- parametri DAW/APVTS;
-- proprietà grafiche;
-- ruoli semantici;
-- pipeline DSP;
-- layout esplicito a griglia;
-- futura risoluzione automatica del layout.
+The project separates graphical identity from runtime semantics. An interface author chooses a component TYPE, assigns a generator-recognized ROLE only when generic behavior is required, configures instance PROPERTY values, and binds automatable state to APVTS. Runtime RESOURCEs such as meter atomics, scope FIFOs, FFT/STFT objects, oversamplers, and latency buffers are generated as consequences rather than authored as UI types.
 
-Il generatore produce un progetto JUCE completo a partire da un template separato, mantenuto nel repository `YATemplate`.
+The generated project includes GUI declarations and attachments, parameter layout, topological layout data, signal observation, bypass, wet/dry, FFT, oversampling, and fixed-latency orchestration. Generic visuals live in YATemplate’s KineticLookAndFeel. Effect-specific processing belongs in `YATemplate/Source/PluginDSP.h`.
 
-## Architettura
+## Release 1.0 highlights
 
-Il flusso generale è:
+- Scheme/GOOPS interface DSL and JUCE project generation.
+- Float, bool, and choice APVTS parameters with JUCE attachments.
+- Explicit Scheme-side topological layout solving and exact rational refinement.
+- Generator-managed input/output gain and plugin-I/O meters.
+- Single or dual PRE/POST DSP waveform scope.
+- Distinct hard-bypass and DSP-bypass behavior.
+- Generator-owned wet/dry capture, alignment, and linear mixing.
+- FFT choices Off, 256, 512, 1024, 2048, 4096, and 8192.
+- Oversampling choices Off/1x, 2x, 4x, and 8x.
+- Fixed host-latency contract, including developer-only latency without FFT/oversampling controls.
+- KineticLookAndFeel, procedural theme background, and 18 palettes.
+- Developer DSP extension through separate `RealPlugin` and `FFTProcessor` APIs.
+- Normative documentation for interface authors, DSP/generator developers, and LLM agents.
 
-```text
-SPECIFICA SCHEME
-      |
-      v
-REGISTRAZIONE COMPONENTI
-      |
-      v
-MODELLO INTERMEDIO
-      |
-      +--> GUI emitters
-      +--> APVTS emitters
-      +--> DSP emitters
-      +--> layout data
-      |
-      v
-YATemplate
-      |
-      v
-PROGETTO JUCE GENERATO
+## Quick start
+
+From this repository, the canonical source-first command for the reference interface is:
+
+```sh
+GUILE_AUTO_COMPILE=0 \
+GUILE_LOAD_COMPILED_PATH="" \
+GUILE_LOAD_PATH="$PWD${GUILE_LOAD_PATH:+:$GUILE_LOAD_PATH}" \
+guile --no-auto-compile -L . -l generator.scm -c \
+'(MakeNewProject
+   "pppbuttavia"
+   NewGeneric-interface
+   #:layout-mode (quote topological)
+   #:topology-declarations pppbuttavia-topology)'
 ```
 
-Il generatore non deve introdurre nel progetto generato logica che può essere espressa e mantenuta nel modello o nel template.
+`MakeNewProject` writes or updates the target project directory in the configured JUCE development workspace, replaces generator-owned marked sections, synchronizes the two Kinetic support files for existing projects, and invokes Projucer to resave the project.
 
-## Repository correlato
-
-Il generatore utilizza un template JUCE separato:
-
-```text
-YATemplate
-```
-
-Le responsabilità sono separate.
-
-### Generator
-
-Contiene:
-
-- DSL Scheme;
-- classi GOOPS;
-- modello intermedio;
-- validazione;
-- naming C++;
-- generazione APVTS;
-- generazione GUI;
-- generazione DSP;
-- emissione dei blocchi C++ generati.
-
-### YATemplate
-
-Contiene:
-
-- struttura base del progetto JUCE;
-- `PluginProcessor`;
-- `PluginEditor`;
-- `KineticLookAndFeel`;
-- infrastruttura DSP;
-- marker per i blocchi generati;
-- risorse grafiche.
-
-I progetti plugin prodotti dal generatore sono artefatti di test/output e non costituiscono la sorgente autorevole.
-
-## File principali
-
-Entry point:
-
-```text
-generator.scm
-```
-
-Sorgenti principali:
-
-```text
-generator-app/code-generator.scm
-generator-app/genera-classi.scm
-generator-app/globals.scm
-generator-app/tools.scm
-```
-
-Supporto build:
-
-```text
-generator-app/Compila.sh
-generator-app/Makefile
-```
-
-I file `.go` sono bytecode compilato Guile e non fanno parte del repository.
-
-## Modello dei componenti
-
-I componenti grafici sono rappresentati da classi GOOPS.
-
-Gerarchia principale:
-
-```text
-<component>
-├── <label>
-│   ├── <header>
-│   ├── <footer>
-│   ├── <link>
-│   └── <palette-label>
-├── <selector>
-│   └── <palette-selector>
-├── <button>
-│   ├── <text-button>
-│   └── <toggle-button>
-│       ├── <normal-toggle-button>
-│       └── <switch>
-│           └── <bypass-switch>
-├── <slider>
-│   ├── <rotary-slider>
-│   └── <linear-slider>
-├── <meter>
-└── <scope>
-```
-
-Ogni componente deriva da `<component>` e può possedere un `role` semantico indipendente dal tipo grafico.
-
-## Role semantici
-
-I role attualmente previsti includono:
-
-```text
-input-gain
-output-gain
-wet-dry
-bypass
-dsp-bypass
-oversampling
-input-meter
-output-meter
-scope
-```
-
-Il tipo grafico e il ruolo semantico sono concetti distinti.
-
-Esempio:
+For interfaces authored with topological declarations, always request topological mode explicitly:
 
 ```scheme
-(make <switch>
-      #:id "DSP Bypass"
-      #:role 'dsp-bypass
-      ...)
+#:layout-mode 'topological
 ```
 
-I role che rappresentano funzioni globali univoche del plugin devono essere validati per evitare duplicazioni.
+The generator also supports a legacy layout mode, but it is not a substitute for topological resolution and can produce materially different geometry.
 
-La ricerca semantica dei componenti avviene tramite:
+## Minimal example
+
+This complete example creates two semantic gain controls and a DSP-bypass toggle. Every slider/toggle supplies the mandatory APVTS binding tuple.
 
 ```scheme
-find-component-by-role
+(define (Minimal-interface dst-folder new-name)
+  (make <screen> #:ratio 1.6 #:width 800)
+  (make <grid> #:rows 12 #:cols 24 #:show-grid #f)
+
+  (make <rotary-slider>
+    #:id "input-gain"
+    #:role 'input-gain
+    #:parameter-id "inputGain"
+    #:parameter-name "Input Gain"
+    #:processor-reference "inputGain"
+    #:title "INPUT"
+    #:min -24.0 #:max 24.0 #:default 0.0 #:interval 0.1
+    #:value-type 'gain #:suffix " dB"
+    #:row 2 #:col 2)
+
+  (make <rotary-slider>
+    #:id "output-gain"
+    #:role 'output-gain
+    #:parameter-id "outputGain"
+    #:parameter-name "Output Gain"
+    #:processor-reference "outputGain"
+    #:title "OUTPUT"
+    #:min -24.0 #:max 24.0 #:default 0.0 #:interval 0.1
+    #:value-type 'gain #:suffix " dB")
+
+  (make <normal-toggle-button>
+    #:id "dsp-bypass"
+    #:role 'dsp-bypass
+    #:text "DSP BYPASS"
+    #:default-state #f
+    #:parameter-id "dspBypass"
+    #:parameter-name "DSP Bypass"
+    #:processor-reference "dspBypass"))
+
+(define minimal-topology
+  (list
+   (lt:group 'main-strip
+     #:layout 'horizontal
+     #:cross-align 'center
+     #:gap 1
+     'input-gain
+     'output-gain
+     'dsp-bypass)))
+
+(MakeNewProject
+  "minimal-plugin"
+  Minimal-interface
+  #:layout-mode 'topological
+  #:topology-declarations minimal-topology)
 ```
 
-## Parametri DAW/APVTS
+The high-level normalizer derives logical component spans from canonical UI metrics. The first component’s `row`/`col` values act as anchors; the flat group determines ordering, one-unit gaps, and cross-axis alignment.
 
-Le famiglie di componenti parametrizzati sono gestite genericamente.
-
-### Parametri booleani
+## Core mental model
 
 ```text
-toggle-button
-normal-toggle-button
-switch
-bypass-switch
+TYPE      graphical component, for example rotary-slider
+ROLE      generator-owned meaning, for example input-gain
+PROPERTY  instance configuration such as range, title, or tap-points
+RESOURCE  generated runtime state such as a meter atomic or scope FIFO
 ```
 
-### Parametri float
+Most effect-specific controls do not need a new ROLE. For example, `reverb-depth` is normally an ordinary bound slider whose cached value is interpreted by PluginDSP.
 
-```text
-rotary-slider
-linear-slider
-```
+See [Architecture Decisions](docs/ARCHITECTURE_DECISIONS.md) for the frozen model and [User Interface Guide](docs/USER_INTERFACE_GUIDE.md) for practical classification and authoring workflows.
 
-Gli helper utilizzati per classificare i componenti parametrizzati sono:
+## Topological layout
+
+Topological mode derives node dimensions from logical UI metrics, combines them with relations, alignments, flat groups, gaps, cohesion, and hierarchical area anchors, and solves horizontal and vertical axes in Scheme. Exact rational coordinates are refined independently into integer rows/columns before the existing JUCE Grid emitter receives them.
 
 ```scheme
-button-parameter-type?
-slider-parameter-type?
-parameter-component-type?
+(lt:group 'audio-strip
+  #:layout 'horizontal
+  #:cross-align 'center
+  #:gap 0
+  'input-meter
+  'input-gain)
 ```
 
-Questi helper vengono usati dagli emitter:
+Groups are flat: group IDs cannot be members of other groups. Areas are anchors/bounds, not exclusive containers or automatic collision-avoidance regions. Use explicit relationships when independently placed structures must not overlap.
+
+See the [Topological Layout Guide](docs/TOPOLOGICAL_LAYOUT_GUIDE.md).
+
+## DSP development
+
+The generator owns this processing orchestration:
 
 ```text
-model->attachment-declaration
-model->attachment-code
-model->parameter-code
-model->dparams-code
-model->getparams-code
-model->valueparams-code
-model->destroy-code
+HOST INPUT
+ -> INPUT METER
+ -> HARD BYPASS
+ -> INPUT GAIN
+ -> PRE SCOPE
+ -> DRY CAPTURE
+ -> FFT
+ -> OVERSAMPLING / RealPlugin
+ -> LATENCY COMPENSATION
+ -> WET/DRY
+ -> POST SCOPE
+ -> OUTPUT GAIN
+ -> OUTPUT METER
+ -> HOST OUTPUT
 ```
 
-Gli emitter generano automaticamente:
-
-- dichiarazioni attachment;
-- `AudioParameterBool`;
-- `AudioParameterFloat`;
-- puntatori `std::atomic<float>*`;
-- caricamento dei parametri;
-- valori correnti;
-- distruzione attachment.
-
-Un componente parametrizzato non deve essere gestito tramite casi speciali legati esclusivamente al suo tipo grafico concreto.
-
-## Pipeline DSP
-
-La pipeline DSP viene generata nel blocco:
-
-```cpp
-/// PROCESS START
-
-...
-
-/// PROCESS END
-```
-
-La struttura prevista è:
+The effect developer implements the actual algorithm in:
 
 ```text
-HARD BYPASS
-    |
-INPUT GAIN
-    |
-INPUT METER
-    |
-DRY COPY            [wet/dry]
-    |
-DSP BYPASS
-    |
-OVERSAMPLING
-    |
-myplugin->processAudio()
-    |
-DOWNSAMPLING
-    |
-WET/DRY MIX
-    |
-OUTPUT GAIN
-    |
-OUTPUT METER
-    |
-SCOPE
+YATemplate/Source/PluginDSP.h
 ```
 
-La funzione principale di composizione è:
+`RealPlugin` implements time-domain processing for separately prepared 1x/2x/4x/8x instances. `FFTProcessor` implements optional spectral processing for separate supported FFT sizes. `PluginDSP.h` is developer-owned and excluded from generator support synchronization.
 
-```scheme
-generate-process-code
-```
+Do not implement an effect by patching generated `processBlock`. Generated projects are inspection/build artifacts; generator defects belong in Scheme and generic renderer defects belong in authoritative YATemplate.
 
-e attualmente combina logicamente:
+See the [DSP Developer Guide](docs/DSP_DEVELOPER_GUIDE.md).
 
-```text
-generate-process-bypass
-generate-process-input-gain
-generate-process-input-meter
-generate-process-dsp
-generate-process-output-gain
-generate-process-output-meter
-generate-process-scope
-```
+## Documentation
 
-### Hard bypass
+| Document | Use it for |
+|---|---|
+| [Release 1.0](docs/RELEASE_1.0.md) | Release scope, verified evidence, boundaries, and final checklist. |
+| [Architecture Decisions](docs/ARCHITECTURE_DECISIONS.md) | Frozen invariants and source-of-truth rules. |
+| [DSL Reference](docs/DSL_REFERENCE.md) | Exact constructors, properties, roles, defaults, and validation. |
+| [User Interface Guide](docs/USER_INTERFACE_GUIDE.md) | Practical interface design and natural-language-to-DSL workflows. |
+| [Topological Layout Guide](docs/TOPOLOGICAL_LAYOUT_GUIDE.md) | Layout declaration syntax and solver semantics. |
+| [DSP Developer Guide](docs/DSP_DEVELOPER_GUIDE.md) | PluginDSP APIs, realtime constraints, FFT/oversampling, transport, and latency. |
+| [Generator Developer Guide](docs/GENERATOR_DEVELOPER_GUIDE.md) | Generator architecture and safe extension recipes. |
+| [LLM Development Guide](docs/LLM_DEVELOPMENT_GUIDE.md) | Compact operational guardrails for repository-modifying agents. |
 
-Role:
+Recommended reading paths:
 
-```text
-bypass
-```
+- Interface author: User Interface Guide → DSL Reference → Topological Layout Guide as needed.
+- DSP developer: DSP Developer Guide → DSL Reference as needed.
+- Generator developer: Generator Developer Guide → Architecture Decisions.
+- LLM/coding agent: LLM Development Guide → Architecture Decisions → focused manual for the task.
 
-Semantica:
+## Reference example
 
-```text
-OFF -> processing normale
-ON  -> uscita immediata da processBlock
-```
+pppbuttavia is the current generated reference/validation plugin. It demonstrates input/output meters and gains, dual PRE/POST scope, wet/dry, oversampling, FFT size, hard/DSP bypass, and palette selection in a substantial topological interface.
 
-Quando il bypass totale è attivo, il buffer deve uscire invariato e l'intera pipeline deve essere saltata.
+It is evidence of generated consequences, not the authoritative implementation source. Do not depend on its resolved coordinates or patch it as the primary generator fix.
 
-Il codice generato è concettualmente:
+## Release status
 
-```cpp
-if (value_Bypass >= 0.5f)
-    return;
-```
+Release 1.0 is a release-ready baseline pending the final `v1.0.0` tag. No tag exists at the time of this README rewrite.
 
-### DSP bypass
+Verified release evidence currently covers:
 
-Role:
+- Linux Release Standalone: verified.
+- Linux Release VST3: verified.
+- Focused Scheme validation, metrics, topology, scope, meter, latency, and UTF-8 regression tests: passing at release-definition verification.
 
-```text
-dsp-bypass
-```
+No Windows or macOS release certification is claimed. See [Release 1.0](docs/RELEASE_1.0.md) for the evidence matrix and remaining final-release actions.
 
-Semantica:
+## Requirements and verified platform
 
-```text
-OFF -> DSP attivo
-ON  -> solo il DSP centrale viene bypassato
-```
+Repository-proven workflow dependencies are:
 
-Se il componente `dsp-bypass` non esiste:
+- GNU Guile with the Scheme modules used by the generator;
+- JUCE modules and Projucer at the paths configured for the workspace;
+- `rsync` for initial template copying;
+- Zenity for the current project-generation UI checks/notifications;
+- a C++ toolchain and platform build tools generated by Projucer.
 
-```cpp
-myplugin->processAudio(buffer, 1);
-```
+The repository records no portable minimum-version contract for these dependencies, so none is claimed here. Current release build evidence is Linux Makefile, Standalone, and VST3 only.
 
-Se esiste:
+## Current boundaries
 
-```cpp
-if (value_DSPBypass < 0.5f)
-{
-    myplugin->processAudio(buffer, 1);
-}
-```
+- Topological groups are flat.
+- Areas are non-exclusive; no general packing solver is provided.
+- Generic BPM/subdivision synchronization is not a Release 1.0 DSL semantic.
+- Scope taps are limited to PRE and POST DSP observation.
+- Explicit UTF-8 conversion is not universal across every textual field.
+- Linux is the currently verified release-build platform.
 
-Gain input/output sono espressi in dB e devono essere convertiti prima di `applyGain`:
+The complete limitations and non-goals are in [Release 1.0](docs/RELEASE_1.0.md).
 
-```cpp
-juce::Decibels::decibelsToGain(value_inputGain)
-juce::Decibels::decibelsToGain(value_outputGain)
-```
+## License and project links
 
-Il processor non deve dipendere da componenti GUI come `KineticMeter`.
+JUCE Plugin Generator is licensed under the [MIT License](LICENSE).
 
-Meter e scope devono usare dati realtime-safe esposti dal processor, ad esempio atomiche o FIFO.
-
-## Wet/Dry
-
-Il role previsto è:
-
-```text
-wet-dry
-```
-
-La generazione Wet/Dry verrà inserita nel blocco DSP centrale.
-
-La futura struttura sarà:
-
-```text
-copy dry buffer
-      |
-DSP
-      |
-wet result
-      |
-mix dry/wet
-```
-
-La copia del buffer dry non deve causare allocazioni dinamiche dentro `processBlock()`.
-
-Gli eventuali buffer necessari devono essere dichiarati e preparati fuori dal realtime path.
-
-## Oversampling
-
-Il role previsto è:
-
-```text
-oversampling
-```
-
-L'oversampling farà parte del blocco DSP centrale e richiederà generazione anche per:
-
-- dichiarazioni;
-- inizializzazione;
-- `prepareToPlay`;
-- eventuale reset;
-- upsampling;
-- processing;
-- downsampling.
-
-Non deve essere implementato come semplice frammento isolato inserito casualmente nella pipeline.
-
-## GUI bypass feedback
-
-Il feedback grafico generato viene inserito nel blocco:
-
-```cpp
-/// PAINT_OVER_CHILDREN START
-
-...
-
-/// PAINT_OVER_CHILDREN END
-```
-
-### Hard bypass
-
-Quando `role = bypass` è attivo:
-
-- viene applicato un overlay scuro;
-- viene visualizzata la scritta `BYPASSED`;
-- gli altri componenti GUI vengono disabilitati;
-- il bypass stesso resta utilizzabile.
-
-### DSP bypass
-
-Quando `role = dsp-bypass` è attivo:
-
-- il plugin rimane utilizzabile;
-- non viene oscurata l'intera GUI;
-- viene mostrato un feedback grafico distinto, ad esempio `DSP BYPASSED`.
-
-Hard bypass e DSP bypass non devono avere lo stesso comportamento grafico.
-
-Il bypass totale ha priorità rispetto al DSP bypass.
-
-## Properties GUI
-
-Le properties fanno parte della DSL e devono essere rispettate dal `KineticLookAndFeel`.
-
-Per gli slider sono previste, tra le altre:
-
-```text
-title
-value-type
-suffix
-show-value
-show-ticks
-show-labels
-tick-count
-tick-mode
-tick-labels
-```
-
-Nel modello Scheme vengono trasformate in properties C++ da:
-
-```scheme
-slider-kinetic-properties->cpp
-```
-
-che genera properties come:
-
-```cpp
-slider.getProperties().set("title", ...);
-slider.getProperties().set("valueType", ...);
-slider.getProperties().set("suffix", ...);
-slider.getProperties().set("showValue", ...);
-slider.getProperties().set("showTicks", ...);
-slider.getProperties().set("showLabels", ...);
-slider.getProperties().set("tickCount", ...);
-slider.getProperties().set("tickMode", ...);
-slider.getProperties().set("tickLabels", ...);
-```
-
-Queste properties non devono essere eliminate, duplicate o sostituite con comportamenti hardcoded nel generatore.
-
-Il `KineticLookAndFeel` è responsabile della loro interpretazione grafica.
-
-## Formattazione valori slider
-
-`KineticLookAndFeel::formatMetric()` centralizza la formattazione dei valori.
-
-Sono attualmente gestiti almeno:
-
-```text
-gain
-freq
-hz
-default
-```
-
-Esempi attesi:
-
-```text
-13230 Hz  -> 13.2k
-1000 Hz   -> 1k
-0 dB      -> 0.0
-3.5 dB    -> +3.5
--60 dB    -> -inf
-```
-
-Il `suffix` viene aggiunto successivamente quando necessario.
-
-Esempi:
-
-```text
-13.2k + " Hz" -> 13.2k Hz
-0.0   + " dB" -> 0.0 dB
-```
-
-I tick utilizzano anch'essi `formatMetric()`.
-
-La visualizzazione dei valori deve quindi essere coerente tra:
-
-- rotary slider;
-- linear slider;
-- tick labels numeriche.
-
-## JUCE Slider TextBox
-
-Il valore viene disegnato direttamente dal `KineticLookAndFeel`.
-
-Il TextBox standard di `juce::Slider` non deve quindi essere visibile.
-
-Il generatore deve produrre:
-
-```cpp
-slider.setTextBoxStyle(
-    juce::Slider::NoTextBox,
-    false,
-    0,
-    0);
-```
-
-per rotary e linear slider.
-
-Questo evita che il TextBox JUCE mostri valori grezzi come:
-
-```text
-13230.100585...
-0.000000...
-```
-
-sovrapponendoli alla rappresentazione prodotta dal `KineticLookAndFeel`.
-
-La disabilitazione del TextBox non sostituisce la gestione delle properties.
-
-Le properties:
-
-```text
-valueType
-suffix
-showValue
-showTicks
-showLabels
-tickCount
-tickMode
-tickLabels
-```
-
-restano parte fondamentale della DSL grafica.
-
-## Layout
-
-Per ora il layout viene specificato direttamente tramite:
-
-```text
-row
-col
-row-span
-col-span
-margin-tb
-margin-lr
-```
-
-Il layout solver automatico esiste come prototipo ma verrà integrato successivamente.
-
-L'architettura futura prevista è:
-
-```text
-DSL layout constraints
-        |
-        v
-normalize
-        |
-        v
-semantic layout solver
-        |
-        v
-positioned model
-        |
-        v
-row / col / span
-        |
-        v
-C++ / JSON emitter
-```
-
-Il C++ finale non deve contenere l'algoritmo di layout automatico.
-
-La chiave JSON corrente per il numero di colonne è:
-
-```text
-cols
-```
-
-e non:
-
-```text
-columns
-```
-
-## Grid debug
-
-La visualizzazione della griglia è una funzionalità di debug della GUI.
-
-Non rappresenta un role semantico del plugin.
-
-Non deve quindi esistere un role come:
-
-```text
-grid-onoff
-```
-
-La funzione di debug può restare statica nel template e può essere condizionata da una define di compilazione, ad esempio:
-
-```cpp
-#if JUCE_DEBUG
-    drawDebugGrid(g);
-#endif
-```
-
-## Marker generati
-
-I marker canonici sono:
-
-```cpp
-/// INTERFACE START
-/// INTERFACE END
-
-/// VALUEPARAMS START
-/// VALUEPARAMS END
-
-/// PROCESS START
-/// PROCESS END
-
-/// PAINT_OVER_CHILDREN START
-/// PAINT_OVER_CHILDREN END
-```
-
-I marker emessi non devono contenere `*`.
-
-Forme errate come:
-
-```cpp
-///*INTERFACE START
-```
-
-non devono essere generate.
-
-La regex utilizzata per individuare un marker e la stringa letterale emessa nel file devono essere considerate due concetti distinti.
-
-## UUID / VST3 CID
-
-Il UUID/CID del plugin deve rimanere stabile quando viene rigenerato lo stesso progetto.
-
-Un nuovo UUID deve essere creato solo per un progetto realmente nuovo.
-
-Rigenerare un plugin esistente non deve modificarne automaticamente l'identità VST3.
-
-La cancellazione della directory del progetto generato non implica necessariamente che si tratti di un nuovo plugin.
-
-La persistenza del UUID/CID deve essere gestita dal generatore.
-
-## KineticLookAndFeel
-
-`KineticLookAndFeel` appartiene al repository `YATemplate`.
-
-Gestisce tra le altre cose:
-
-- palette;
-- rotary slider;
-- linear slider;
-- meter;
-- scope;
-- toggle/switch;
-- formattazione metrica;
-- ticks;
-- labels;
-- feedback grafici.
-
-La logica grafica generica deve essere mantenuta nel template.
-
-Il Generator deve limitarsi a descrivere i componenti e ad emettere configurazioni/properties appropriate.
-
-## Palette
-
-Il sistema prevede palette selezionabili tramite componenti GUI.
-
-La palette selezionata deve essere coerente tra:
-
-- testo mostrato nel selector;
-- stato del selector;
-- palette realmente applicata dal `KineticLookAndFeel`.
-
-L'inizializzazione del valore del selector non deve limitarsi a modificare il testo senza applicare effettivamente la palette corrispondente.
-
-Questo punto è ancora da verificare/completare.
-
-## Meter
-
-I meter utilizzano role semantici:
-
-```text
-input-meter
-output-meter
-```
-
-Il processor deve calcolare i livelli senza dipendere dal componente grafico.
-
-Il peak dovrebbe tenere conto di tutti i canali disponibili, non soltanto del channel 0.
-
-Esempio concettuale:
-
-```cpp
-float peak = 0.0f;
-
-for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
-{
-    peak = juce::jmax(
-        peak,
-        buffer.getMagnitude(
-            ch,
-            0,
-            buffer.getNumSamples()));
-}
-```
-
-Il valore deve essere trasferito verso l'Editor tramite strutture realtime-safe.
-
-## Scope
-
-Il role semantico è:
-
-```text
-scope
-```
-
-Il processor può alimentare una FIFO o struttura equivalente.
-
-La GUI legge i dati senza introdurre dipendenze realtime verso componenti grafici.
-
-L'implementazione attuale può utilizzare il channel 0 come prima versione, ma l'architettura deve consentire evoluzioni future.
-
-## Modello intermedio
-
-La specifica Scheme non deve essere usata direttamente dagli emitter in modo disordinato.
-
-Il flusso è:
-
-```text
-component object
-      |
-      v
-component->model
-      |
-      v
-registered model
-      |
-      v
-emitters
-```
-
-Il metodo base:
-
-```scheme
-component->model
-```
-
-gestisce le proprietà comuni, tra cui:
-
-```text
-id
-type
-role
-row
-col
-rowSpan
-colSpan
-margin-tb
-margin-lr
-```
-
-I metodi specializzati aggiungono le proprietà specifiche tramite:
-
-```scheme
-(next-method)
-```
-
-La registrazione assegna anche un identificatore C++ stabile attraverso:
-
-```scheme
-allocate-cpp-identifier!
-```
-
-La relazione tra logical id e C++ id è mantenuta separata.
-
-## Naming C++
-
-La DSL usa logical ID leggibili.
-
-Il generatore deve trasformarli in identificatori C++ validi.
-
-Funzioni rilevanti:
-
-```scheme
-reset-cpp-identifiers!
-allocate-cpp-identifier!
-logical-id->cpp-id
-```
-
-Collisioni tra identificatori C++ devono essere risolte automaticamente.
-
-Duplicazioni di logical ID devono invece generare errore.
-
-Le relazioni semantiche future del layout dovranno usare logical ID e non identificatori C++.
-
-## Metodo di sviluppo
-
-Procedere per modifiche incrementali.
-
-Workflow:
-
-1. definire il comportamento;
-2. modificare il Generator o YATemplate;
-3. rigenerare il plugin;
-4. compilare;
-5. testare;
-6. approvare;
-7. eseguire commit Git.
-
-Non procedere con molte modifiche indipendenti contemporaneamente.
-
-Una funzionalità deve essere verificata prima di passare alla successiva.
-
-Il codice generato non deve essere corretto manualmente se la modifica appartiene al Generator o al Template.
-
-## Git
-
-Il progetto usa due repository distinti:
-
-```text
-Generator
-YATemplate
-```
-
-### Generator repository
-
-Contiene esclusivamente i sorgenti del generatore e la documentazione.
-
-I file `.go` compilati da Guile non vengono versionati.
-
-### YATemplate repository
-
-Contiene esclusivamente il template JUCE necessario alla generazione.
-
-I progetti JUCE generati non costituiscono repository sorgente autorevoli.
-
-## Strategia .gitignore
-
-Entrambi i repository usano una strategia whitelist.
-
-Concettualmente:
-
-```gitignore
-*
-!.gitignore
-!README.md
-...
-```
-
-Vengono dichiarati esplicitamente i file che appartengono al progetto.
-
-Questo è preferito rispetto a una blacklist, poiché le directory di sviluppo contengono numerosi:
-
-- backup;
-- build;
-- file generati;
-- esperimenti;
-- vecchie versioni;
-- file temporanei;
-- progetti JUCE di test.
-
-## Stato del progetto
-
-Lo stato architetturale corrente è descritto in:
-
-```text
-PROJECT_STATE.md
-```
-
-Le attività immediate sono descritte in:
-
-```text
-NEXT.md
-```
-
-`README.md` descrive l'architettura generale relativamente stabile.
-
-`PROJECT_STATE.md` descrive lo stato corrente dell'implementazione.
-
-`NEXT.md` descrive il punto preciso da cui riprendere lo sviluppo.
-
-## Stato DSP corrente
-
-Sono già stati introdotti o impostati:
-
-```text
-hard bypass
-input gain
-input meter
-DSP bypass
-output gain
-output meter
-scope
-```
-
-La gestione APVTS è stata generalizzata per slider e toggle parametrizzati.
-
-Le prossime funzionalità DSP previste sono:
-
-```text
-wet-dry
-oversampling
-```
-
-## Attività immediate
-
-La sequenza attuale prevista è:
-
-```text
-1. verificare NoTextBox per tutti gli slider
-2. completare feedback grafico hard bypass
-3. completare feedback grafico DSP bypass
-4. verificare tutte le properties slider
-5. generare wet/dry
-6. generare oversampling
-7. integrare successivamente il layout solver automatico
-```
-
-Sono volutamente rimandati:
-
-```text
-layout automatico
-rifinitura grafica meter
-sincronizzazione iniziale palette
-ulteriori ottimizzazioni grafiche
-```
-
-## Principio fondamentale
-
-Il Generator descrive **cosa** rappresenta un componente.
-
-YATemplate e `KineticLookAndFeel` definiscono **come** quel componente viene implementato e rappresentato graficamente.
-
-Il `role` descrive **che funzione semantica** svolge il componente nel plugin.
-
-Questi tre livelli devono restare distinti:
-
-```text
-TYPE      -> natura grafica / tecnica del componente
-ROLE      -> significato semantico nell'applicazione
-PROPERTY  -> configurazione del comportamento/aspetto
-```
-
-Esempio:
-
-```scheme
-(make <linear-slider>
-      #:id "Output Gain"
-      #:role 'output-gain
-      #:value-type 'gain
-      #:suffix " dB"
-      ...)
-```
-
-dove:
-
-```text
-linear-slider -> TYPE
-output-gain   -> ROLE
-gain / dB     -> PROPERTIES
-```
-
-Questa separazione è parte dell'architettura del progetto e deve essere preservata nelle modifiche future.
+Copyright © 2025 Franco Arcieri (`afrrcainecroi`).
