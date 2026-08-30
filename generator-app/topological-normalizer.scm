@@ -5,14 +5,15 @@
   #:use-module (generator-app layout)
   #:use-module (generator-app ui-metrics)
   #:use-module (generator-app topological-layout)
+  #:use-module (generator-app generation-state)
   #:export (lt:constrain
-            dsl-component->metric-type
-            dsl-model->metric-type
-            normalize-topological-component
-            normalize-topological-model
-            normalize-topological-layout
-            normalize-topological-model-layout
-            solve-normalized-topological-layout))
+			      dsl-component->metric-type
+			      dsl-model->metric-type
+			      normalize-topological-component
+			      normalize-topological-model
+			      normalize-topological-layout
+			      normalize-topological-model-layout
+			      solve-normalized-topological-layout))
 
 ;; This module is the only adapter between concrete DSL objects and the
 ;; experimental topological IR. Neither side needs knowledge of the other's
@@ -192,85 +193,177 @@
 
 (define (valid-topology-declaration? declaration)
   (case (field declaration 'kind)
-    ((alignment group node-area) #t)
-    ((node-constraints) (valid-node-constraints-declaration? declaration))
-    (else #f)))
 
-(define (replace-node-constraints node constraints)
-  (map (lambda (entry)
-         (if (eq? (car entry) 'constraints)
-             (cons 'constraints constraints)
-             entry))
-       node))
+    ((alignment
+      group
+      stack
+      node-area)
+     #t)
 
-(define (attach-node-constraints nodes declarations)
-  (let ((node-ids (map (lambda (node) (field node 'id)) nodes)))
-    (for-each
-     (lambda (declaration)
-       (unless (memq (field declaration 'node) node-ids)
-         (error "Topological node-constraints target does not exist"
-                (field declaration 'node))))
-     declarations)
-    (map
-     (lambda (node)
-       (let* ((id (field node 'id))
-              (matching
-               (filter (lambda (declaration)
-                         (eq? (field declaration 'node) id))
-                       declarations))
-              (constraints
-               (append-map (lambda (declaration)
-                             (field declaration 'constraints))
-                           matching)))
-         (replace-node-constraints
-          node
-          (append (field node 'constraints) constraints))))
-     nodes)))
+    ((node-constraints)
+     (valid-node-constraints-declaration?
+      declaration))
 
-(define* (normalize-topological-model-layout models topology-declarations
-                                              #:key grid-model)
+    (else
+     #f)))
+
+;; (define (replace-node-constraints node constraints)
+;;   (map (lambda (entry)
+;;          (if (eq? (car entry) 'constraints)
+;;              (cons 'constraints constraints)
+;;              entry))
+;;        node))
+
+;; (define (attach-node-constraints nodes declarations)
+;;   (let ((node-ids (map (lambda (node) (field node 'id)) nodes)))
+;;     (for-each
+;;      (lambda (declaration)
+;;        (unless (memq (field declaration 'node) node-ids)
+;;          (error "Topological node-constraints target does not exist"
+;;                 (field declaration 'node))))
+;;      declarations)
+;;     (map
+;;      (lambda (node)
+;;        (let* ((id (field node 'id))
+;;               (matching
+;;                (filter (lambda (declaration)
+;;                          (eq? (field declaration 'node) id))
+;;                        declarations))
+;;               (constraints
+;;                (append-map (lambda (declaration)
+;;                              (field declaration 'constraints))
+;;                            matching)))
+;;          (replace-node-constraints
+;;           node
+;;           (append (field node 'constraints) constraints))))
+;;      nodes)))
+
+(define* (normalize-topological-model-layout
+          models
+          topology-declarations
+          #:key
+          grid-model)
+
   (unless (list? models)
-    (error "DSL component models for topological normalization must be a list"))
+    (error
+     "DSL component models for topological normalization must be a list"))
+
   (unless (list? topology-declarations)
-    (error "Topological declarations must be a list"))
+    (error
+     "Topological declarations must be a list"))
+
   (unless grid-model
-    (error "Topological normalization requires an explicit DSL grid model"))
-  (unless (every valid-topology-declaration? topology-declarations)
-    (error "Unsupported separate topological declaration"
-           topology-declarations))
-  (let* ((raw-nodes (map normalize-topological-model models))
-         (node-constraint-declarations
-          (filter (lambda (declaration)
-                    (eq? (field declaration 'kind) 'node-constraints))
-                  topology-declarations))
+    (error
+     "Topological normalization requires an explicit DSL grid model"))
+
+  (unless
+      (every
+       valid-topology-declaration?
+       topology-declarations)
+
+    (error
+     "Unsupported separate topological declaration"
+     topology-declarations))
+
+  (let* ((nodes
+          (map
+           normalize-topological-model
+           models))
+
+         ;; ------------------------------------------------------
+         ;; IMPORTANT:
+         ;;
+         ;; node-constraints are no longer attached here.
+         ;;
+         ;; They remain first-class topology declarations so that
+         ;; lt:solve can apply them to either nodes OR stacks.
+         ;; ------------------------------------------------------
+
          (global-declarations
-          (filter (lambda (declaration)
-                    (memq (field declaration 'kind)
-                          '(alignment group node-area)))
-                  topology-declarations))
-         (nodes (attach-node-constraints
-                 raw-nodes node-constraint-declarations))
+          (filter
+
+           (lambda (declaration)
+
+             (memq
+              (field declaration 'kind)
+
+              '(alignment
+                group
+                stack
+                node-area
+                node-constraints)))
+
+           topology-declarations))
+
          (warnings
-          (filter-map legacy-span-warning models nodes)))
+          (filter-map
+           legacy-span-warning
+           models
+           nodes)))
+
     `((screen-rows . ,(field grid-model 'rows))
       (screen-cols . ,(field grid-model 'cols))
+      (ui-scale . ,(field grid-model 'ui-scale))
+      (ui-size . ,(field grid-model 'ui-size))
       (warnings . ,warnings)
-      (entries . ,(append nodes global-declarations)))))
+      (entries . ,(append nodes global-declarations)))
+    ))
 
-(define* (normalize-topological-layout components topology-declarations
-                                        #:key grid)
+(define* (normalize-topological-layout
+          components
+          topology-declarations
+          #:key
+          grid)
+
   (unless (list? components)
-    (error "DSL components for topological normalization must be a list"))
+    (error
+     "DSL components for topological normalization must be a list"))
+
   (unless grid
-    (error "Topological normalization requires an explicit DSL <grid>"))
-  (normalize-topological-model-layout
-   (map component->model components)
-   topology-declarations
-   #:grid-model `((rows . ,(grid:rows grid))
-                  (cols . ,(grid:cols grid)))))
+    (error
+     "Topological normalization requires an explicit DSL <grid>"))
+
+  (let* ((screen
+          (generation-screen))
+
+         (scale
+          (and screen
+               (assoc-ref screen 'ui-scale)))
+
+         (size
+          (and screen
+               (assoc-ref screen 'ui-size))))
+
+    (normalize-topological-model-layout
+     (map component->model components)
+     topology-declarations
+
+     #:grid-model
+     `((rows . ,(grid:rows grid))
+       (cols . ,(grid:cols grid))
+       (ui-scale . ,scale)
+       (ui-size . ,size)))))
 
 (define (solve-normalized-topological-layout normalized)
-  (let ((rows (field normalized 'screen-rows))
-        (cols (field normalized 'screen-cols))
-        (entries (field normalized 'entries)))
-    (lt:solve entries #:screen-rows rows #:screen-cols cols)))
+
+  (let ((rows
+         (field normalized 'screen-rows))
+
+        (cols
+         (field normalized 'screen-cols))
+
+        (scale
+         (field normalized 'ui-scale))
+
+        (size
+         (field normalized 'ui-size))
+
+        (entries
+         (field normalized 'entries)))
+
+    (lt:solve
+     entries
+     #:screen-rows rows
+     #:screen-cols cols
+     #:ui-scale scale
+     #:ui-size size)))

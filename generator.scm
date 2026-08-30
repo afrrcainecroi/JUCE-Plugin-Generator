@@ -117,7 +117,7 @@
   ;; (set! *OVERSAMPLING-useIntegerLatency* #t)
   (interface-definitions dst-folder new-name)
 
-  (unless (memq layout-mode '(legacy topological))
+  (unless (memq layout-mode '(legacy topological physical))
     (error "Unknown generator layout mode" layout-mode))
 
   ;; Legacy keeps the diagnostic shadow branch.  Topological mode performs the

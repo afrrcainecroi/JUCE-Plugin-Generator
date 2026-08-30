@@ -4,6 +4,9 @@
   #:use-module (generator-app cpp-generation)
   #:use-module (generator-app layout)
   #:use-module (generator-app topological-normalizer)
+  #:use-module (generator-app physical-layout)
+  #:use-module (generator-app discrete-grid-layout)
+  #:use-module (generator-app standard-plugin-shell)
   #:export (generate-member-declarations
             generate-constructor-code
             generate-attachment-declarations
@@ -17,6 +20,7 @@
             build-topological-shadow
             run-generation-topological-shadow
             refine-topological-grid
+	    adapt-discrete-grid-layout
             prepare-generation-layout
             generate-selected-grid-code))
 
@@ -78,14 +82,45 @@
 (define (compare-legacy-topological-layout models resolved)
   (map (lambda (model) (compare-one-layout model resolved)) models))
 
-(define (build-topological-shadow models grid-model topology-declarations)
-  (let* ((normalized
+(define (build-topological-shadow
+         models
+         grid-model
+         topology-declarations)
+
+  (let* ((screen-model
+          (generation-screen))
+
+         (ui-scale
+          (and screen-model
+               (assoc-ref screen-model 'ui-scale)))
+
+         (ui-size
+          (and screen-model
+               (assoc-ref screen-model 'ui-size)))
+
+         (extended-grid-model
+          `((rows . ,(field grid-model 'rows))
+            (cols . ,(field grid-model 'cols))
+            (show-grid . ,(field grid-model 'show-grid))
+            (ui-scale . ,ui-scale)
+            (ui-size . ,ui-size)))
+
+         (normalized
           (normalize-topological-model-layout
-           models topology-declarations #:grid-model grid-model))
-         (resolved (solve-normalized-topological-layout normalized)))
+           models
+           topology-declarations
+           #:grid-model extended-grid-model))
+
+         (resolved
+          (solve-normalized-topological-layout
+           normalized)))
+
     `((normalized . ,normalized)
       (resolved . ,resolved)
-      (comparison . ,(compare-legacy-topological-layout models resolved)))))
+      (comparison .
+                  ,(compare-legacy-topological-layout
+                    models
+                    resolved)))))
 
 ;; This real-generator boundary only reads generation state.  Its diagnostic
 ;; result is never fed to any legacy C++ emitter.
@@ -186,36 +221,271 @@
       (grid-model . ,discrete-grid)
       (layout-components . ,layout-components))))
 
+;; ================================================================
+;; DISCRETE GRID LAYOUT -> EXISTING GRID EMITTER CONTRACT
+;;
+;; This is a pure adapter.
+;;
+;; Input:
+;;   - registered DSL component models
+;;   - DiscreteGridLayout
+;;   - current generator grid model (show-grid only)
+;;
+;; Output:
+;;   - grid-model expected by generate-grid-code
+;;   - layout-components expected by generate-grid-code
+;;
+;; IMPORTANT:
+;;   PhysicalLayout has already resolved final geometry.
+;;   Legacy margins MUST NOT be applied again here.
+;; ================================================================
+
+(define (adapt-discrete-grid-layout
+         models
+         discrete-layout
+         generator-grid-model)
+
+  (unless (eq? (field discrete-layout 'kind)
+               'discrete-grid-layout)
+
+    (error
+      "Physical grid adapter requires DiscreteGridLayout"
+      discrete-layout))
+
+
+  (let* ((discrete-components
+          (field discrete-layout 'components))
+
+         (rows
+          (field discrete-layout 'rows))
+
+         (cols
+          (field discrete-layout 'cols))
+
+         (row-tracks
+          (field discrete-layout 'row-tracks))
+
+         (col-tracks
+          (field discrete-layout 'col-tracks))
+
+         (grid-model
+          `((rows . ,rows)
+            (cols . ,cols)
+            (row-tracks . ,row-tracks)
+            (col-tracks . ,col-tracks)
+            (show-grid .
+                       ,(field generator-grid-model
+                               'show-grid))))
+
+         (layout-components
+          (map
+
+            (lambda (model)
+
+              (let* ((id-value
+                      (field model 'id))
+
+                     (id
+                      (if (string? id-value)
+                          (string->symbol id-value)
+                          id-value))
+
+                     (rectangle
+                      (find
+                        (lambda (entry)
+                          (eq? (field entry 'id)
+                               id))
+                        discrete-components)))
+
+                (unless rectangle
+
+                  (error
+                    "DiscreteGridLayout is missing a registered DSL component"
+                    id))
+
+                `((var . ,(field model 'var))
+                  (row . ,(field rectangle 'row))
+                  (col . ,(field rectangle 'col))
+                  (rowSpan . ,(field rectangle 'rowSpan))
+                  (colSpan . ,(field rectangle 'colSpan)))))
+
+            models)))
+
+    `((grid-model . ,grid-model)
+      (layout-components . ,layout-components))))
+
 (define* (prepare-generation-layout
           #:key
           (layout-mode 'legacy)
           (topology-declarations '()))
-  (unless (memq layout-mode '(legacy topological))
+
+  (unless (memq layout-mode '(legacy topological physical))
     (error "Unknown generator layout mode" layout-mode))
-  (let* ((models (reverse (generation-components)))
-         (grid-model (generation-grid))
-         (shadow (build-topological-shadow
-                  models grid-model topology-declarations)))
-    (if (eq? layout-mode 'legacy)
-        `((mode . legacy) (shadow . ,shadow) (refinement . #f))
-        `((mode . topological)
-          (shadow . ,shadow)
-          (refinement . ,(refine-topological-grid
-                           shadow models grid-model))))))
+
+  (let* ((models
+          (reverse
+            (generation-components)))
+
+         (grid-model
+          (generation-grid))
+
+         (screen-model
+          (generation-screen))
+
+         (shadow
+          (build-topological-shadow
+            models
+            grid-model
+            topology-declarations)))
+
+    (case layout-mode
+
+      ((legacy)
+
+       `((mode . legacy)
+         (shadow . ,shadow)
+         (refinement . #f)
+         (physical-layout . #f)
+         (discrete-layout . #f)
+         (adapter . #f)))
+
+
+      ((topological)
+
+       `((mode . topological)
+
+         (shadow . ,shadow)
+
+         (refinement .
+                     ,(refine-topological-grid
+                        shadow
+                        models
+                        grid-model))
+
+         (physical-layout . #f)
+         (discrete-layout . #f)
+         (adapter . #f)))
+
+
+      ((physical)
+
+       (let* ((normalized
+               (field shadow 'normalized))
+
+	      (screen-width
+	       (field screen-model 'width))
+
+	      (screen-ratio
+	       (field screen-model 'ratio))
+
+	      (exact-screen-ratio
+	       (if (exact? screen-ratio)
+		   screen-ratio
+		   (rationalize
+		    (inexact->exact screen-ratio)
+		    1/1000000)))
+
+	      (screen-height
+	       (/ screen-width
+		  exact-screen-ratio))
+
+	      (ui-scale
+	       (field screen-model 'ui-scale))
+
+              (ui-size
+               (field screen-model 'ui-size))
+
+              (policy
+               (standard-physical-layout-policy))
+
+              (physical-layout
+               (pl:solve
+                 normalized
+                 screen-width
+                 screen-height
+                 policy
+                 #:base-unit-px 12
+                 #:ui-scale ui-scale
+                 #:ui-size ui-size))
+
+              (discrete-layout
+               (dgl:discretize
+                 physical-layout))
+
+              (adapter
+               (adapt-discrete-grid-layout
+                 models
+                 discrete-layout
+                 grid-model)))
+
+         `((mode . physical)
+
+           (shadow . ,shadow)
+
+           (refinement . #f)
+
+           (physical-layout .
+                            ,physical-layout)
+
+           (discrete-layout .
+                            ,discrete-layout)
+
+           (adapter .
+                    ,adapter)))))))
 
 (define* (generate-selected-grid-code
           #:key
           (layout-mode 'legacy)
           (topology-declarations '()))
-  (if (eq? layout-mode 'legacy)
-      (generate-grid-code)
-      (let* ((plan (prepare-generation-layout
-                    #:layout-mode layout-mode
-                    #:topology-declarations topology-declarations))
-             (refinement (field plan 'refinement)))
-        (generate-grid-code
-         #:grid-model (field refinement 'grid-model)
-         #:layout-components (field refinement 'layout-components)))))
+
+  (case layout-mode
+
+    ((legacy)
+
+     (generate-grid-code))
+
+
+    ((topological)
+
+     (let* ((plan
+             (prepare-generation-layout
+               #:layout-mode layout-mode
+               #:topology-declarations topology-declarations))
+
+            (refinement
+             (field plan 'refinement)))
+
+       (generate-grid-code
+         #:grid-model
+         (field refinement 'grid-model)
+
+         #:layout-components
+         (field refinement 'layout-components))))
+
+
+    ((physical)
+
+     (let* ((plan
+             (prepare-generation-layout
+               #:layout-mode layout-mode
+               #:topology-declarations topology-declarations))
+
+            (adapter
+             (field plan 'adapter)))
+
+       (generate-grid-code
+         #:grid-model
+         (field adapter 'grid-model)
+
+         #:layout-components
+         (field adapter 'layout-components))))
+
+
+    (else
+
+     (error
+       "Unknown generator layout mode"
+       layout-mode))))
 
 (define (generate-member-declarations)
   (apply string-append

@@ -4,7 +4,9 @@
   #:export (register-ui-metrics!
 			      ui-metrics
 			      ui-profile
-			      ui-capability-profile))
+			      ui-capability-profile
+			      ui-resolve-scale
+			      ))
 
 ;; Intrinsic UI metrics are registered by TYPE. They do not encode ROLE,
 ;; instance PROPERTY values, RESOURCE identities, or layout decisions.
@@ -13,6 +15,88 @@
 (define (metric-ref metrics key)
   (let ((entry (assoc key metrics)))
     (and entry (cdr entry))))
+
+;; ======================================================================
+;; CANONICAL UI SCALE RESOLUTION
+;;
+;; ui-scale:
+;;   explicit numeric scale
+;;
+;; ui-size:
+;;   symbolic preset
+;;
+;; If both are supplied they must resolve to the same exact value.
+;; The result is always an exact positive number.
+;; ======================================================================
+
+(define (ui-resolve-scale ui-scale ui-size)
+
+  (let* ((size-scale
+          (case ui-size
+            ((#f)       #f)
+            ((xx-small) 7/10)
+            ((x-small)  4/5)
+            ((small)    9/10)
+            ((medium)   1)
+            ((large)    23/20)
+            ((x-large)  13/10)
+            ((xx-large) 3/2)
+            (else
+             (error
+              "Invalid ui-size preset"
+              ui-size))))
+
+         (scale-rational
+          (cond
+            ((not ui-scale)
+             #f)
+
+            ((not (number? ui-scale))
+             (error
+              "ui-scale must be numeric"
+              ui-scale))
+
+            ((exact? ui-scale)
+             ui-scale)
+
+            (else
+             (rationalize
+              (inexact->exact ui-scale)
+              1/1000000)))))
+
+    (when
+        (and scale-rational
+             (<= scale-rational 0))
+
+      (error
+       "ui-scale must be > 0"
+       ui-scale))
+
+    (cond
+
+      ((and scale-rational
+            size-scale)
+
+       (unless
+           (= scale-rational
+              size-scale)
+
+         (error
+          "Conflicting ui-scale and ui-size"
+          ui-scale
+          ui-size))
+
+       scale-rational)
+
+      (scale-rational
+       scale-rational)
+
+      (size-scale
+       size-scale)
+
+      (else
+       1))))
+
 
 (define (register-ui-metrics! type metrics)
   (unless (symbol? type)
@@ -99,8 +183,8 @@
        (height . 5)))
 
    (preferred
-    . ((width . 7)
-       (height . 7)))
+    . ((width . 8)
+       (height . 8)))
 
    (useful-max
     . ((width . 9)
@@ -127,8 +211,8 @@
         . ((width . 5)
            (height . 5)))
        (standard
-        . ((width . 7)
-           (height . 7)))
+        . ((width . 8)
+           (height . 8)))
        (extended
         . ((width . 9)
            (height . 9)))))
@@ -782,15 +866,15 @@
        (width . #f)
        (height . #f)))
    (visual-min . ((width . 8) (height . 6)))
-   (preferred . ((width . 18) (height . 10)))
-   (useful-max . ((width . 18) (height . 10)))
+   (preferred . ((width . 18) (height . 6)))
+   (useful-max . ((width . 18) (height . 8)))
    (visual-min-profile . compact)
    (preferred-profile . standard)
    (useful-max-profile . extended)
    (profiles
     . ((compact . ((width . 8) (height . 6)))
-       (standard . ((width . 18) (height . 10)))
-       (extended . ((width . 18) (height . 10)))))
+       (standard . ((width . 18) (height . 6)))
+       (extended . ((width . 18) (height . 8)))))
    (natural-geometry
     . ((form . waveform-scope)
        (orientation . horizontal)

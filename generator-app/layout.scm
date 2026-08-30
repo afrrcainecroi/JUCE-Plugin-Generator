@@ -12,6 +12,8 @@
             <screen>
             screen:ratio
             screen:width
+	    screen:ui-scale
+	    screen:ui-size
             register-grid!
             register-screen!
             component-model->layout-model
@@ -30,9 +32,12 @@
 (define (register-screen! screen)
   (when (generation-screen)
     (error "Only one screen may be declared"))
+
   (set-generation-screen!
    `((ratio . ,(screen:ratio screen))
-     (width . ,(screen:width screen)))))
+     (width . ,(screen:width screen))
+     (ui-scale . ,(screen:ui-scale screen))
+     (ui-size . ,(screen:ui-size screen)))))
 
 (new-class <grid>
            ()
@@ -45,7 +50,9 @@
 (new-class <screen>
            ()
            ((ratio (/ (+ 1.0 (sqrt 5.0)) 2.0))
-            (width 800))
+            (width 800)
+            (ui-scale #f)
+            (ui-size #f))
            #:code
            (register-screen! this))
 
@@ -75,37 +82,110 @@ standardScreenHeight = standardScreenWidth / screenRatio;
   (map component-model->layout-model
        (reverse (generation-components))))
 
+
 (define* (generate-grid-code #:key
                              (grid-model (generation-grid))
                              (layout-components #f))
   (unless grid-model
     (error "<grid> has to be defined"))
-  (let* ((rows (assoc-ref grid-model 'rows))
-         (cols (assoc-ref grid-model 'cols))
-         (show-grid (assoc-ref grid-model 'show-grid))
-         (layout-components (or layout-components
-                                (generate-layout-data-components)))
-         (grid-data `(("rows" . ,rows) ("cols" . ,cols)))
-         (grid-json (json-prepend-key "grid" grid-data))
+
+  (let* ((rows
+          (assoc-ref grid-model 'rows))
+
+         (cols
+          (assoc-ref grid-model 'cols))
+
+         (show-grid
+          (assoc-ref grid-model 'show-grid))
+
+         (row-tracks
+          (assoc-ref grid-model 'row-tracks))
+
+         (col-tracks
+          (assoc-ref grid-model 'col-tracks))
+
+         (layout-components
+          (or layout-components
+              (generate-layout-data-components)))
+
+         (json-number-list
+          (lambda (values)
+
+            (and values
+
+                 (list->vector
+
+                   (map
+                     (lambda (value)
+
+                       (if (exact? value)
+                           (exact->inexact value)
+                           value))
+
+                     values)))))
+
+         (grid-data
+          (append
+
+            `(("rows" . ,rows)
+              ("cols" . ,cols))
+
+            (if row-tracks
+
+                `(("row-tracks" .
+                                 ,(json-number-list
+                                    row-tracks)))
+
+                '())
+
+            (if col-tracks
+
+                `(("col-tracks" .
+                                 ,(json-number-list
+                                    col-tracks)))
+
+                '())))
+
+         (grid-json
+          (json-prepend-key
+            "grid"
+            grid-data))
+
          (components-json
-          (json-prepend-key "components" (list->vector layout-components)))
+          (json-prepend-key
+            "components"
+            (list->vector layout-components)))
+
          (composed
           (scm->json-string
-           (append grid-json components-json)
-           #:pretty #t)))
+            (append
+              grid-json
+              components-json)
+            #:pretty #t)))
+
     (string-append
-     ;; (format #f
-     ;;         "bool drawDebugGrid = ~a;\n"
-     ;;         (if show-grid "true" "false"))
-     "componentMap = {\n"
-     (apply
-      string-append
-      (map
-       (lambda (it)
-         (let ((name (assoc-ref it 'var)))
-           (format #f "{\"~a\", &~a},\n" name name)))
-       layout-components))
-     "};\n"
-     (format #f
-             "\njuce::String jsonString = R\"(~a)\";\n"
-             composed))))
+
+      "componentMap = {\n"
+
+      (apply
+        string-append
+
+        (map
+
+          (lambda (it)
+
+            (let ((name
+                   (assoc-ref it 'var)))
+
+              (format #f
+                      "{\"~a\", &~a},\n"
+                      name
+                      name)))
+
+          layout-components))
+
+      "};\n"
+
+      (format #f
+              "\njuce::String jsonString = R\"(~a)\";\n"
+              composed))))

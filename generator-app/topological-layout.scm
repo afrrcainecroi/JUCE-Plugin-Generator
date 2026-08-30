@@ -4,6 +4,7 @@
   #:use-module (generator-app ui-metrics)
   #:export (lt:node
             lt:group
+	    lt:stack
             lt:place-in-area
             lt:next-right-of
             lt:next-left-of
@@ -173,6 +174,131 @@
       (area . ,(and area-seen? area))
       (members . ,members))))
 
+;; ======================================================================
+;; FIRST-CLASS TOPOLOGICAL STACK
+;;
+;; Unlike lt:group, a stack is a real geometric layout entity.
+;; It owns a derived bounding box and may therefore be referenced by
+;; positional constraints, alignments and area placement.
+;;
+;; Members may be:
+;;
+;;   - node ids
+;;   - stack ids
+;;   - nested inline lt:stack declarations
+;;
+;; Stacks never become JUCE components.
+;; ======================================================================
+
+(define (lt:stack id . arguments)
+  (unless (symbol? id)
+    (error "Topological stack id must be a symbol" id))
+
+  (let loop ((remaining arguments)
+             (layout #f)
+             (gap 0)
+             (gap-seen? #f)
+             (cross-align 'center)
+             (cross-align-seen? #f)
+             (members '()))
+
+    (cond
+
+     ((null? remaining)
+
+      (unless layout
+        (error "Topological stack requires #:layout" id))
+
+      (unless (memq layout '(horizontal vertical))
+        (error "Topological stack invalid layout" id layout))
+
+      (unless (memq cross-align '(start center end))
+        (error "Topological stack invalid cross-align"
+               id
+               cross-align))
+
+      (unless (and (number? gap)
+                   (real? gap)
+                   (exact? gap)
+                   (>= gap 0))
+        (error "Topological stack invalid gap"
+               id
+               gap))
+
+      (when (null? members)
+        (error "Topological stack requires at least one member"
+               id))
+
+      `((kind . stack)
+        (id . ,id)
+        (layout . ,layout)
+        (gap . ,gap)
+        (cross-align . ,cross-align)
+        (members . ,(reverse members))))
+
+     ((eq? (car remaining) #:layout)
+
+      (when (or layout
+                (null? (cdr remaining)))
+        (error "Invalid or duplicate stack #:layout"
+               id))
+
+      (loop (cddr remaining)
+            (cadr remaining)
+            gap
+            gap-seen?
+            cross-align
+            cross-align-seen?
+            members))
+
+     ((eq? (car remaining) #:gap)
+
+      (when (or gap-seen?
+                (null? (cdr remaining)))
+        (error "Invalid or duplicate stack #:gap"
+               id))
+
+      (loop (cddr remaining)
+            layout
+            (cadr remaining)
+            #t
+            cross-align
+            cross-align-seen?
+            members))
+
+     ((eq? (car remaining) #:cross-align)
+
+      (when (or cross-align-seen?
+                (null? (cdr remaining)))
+        (error "Invalid or duplicate stack #:cross-align"
+               id))
+
+      (loop (cddr remaining)
+            layout
+            gap
+            gap-seen?
+            (cadr remaining)
+            #t
+            members))
+
+     ((keyword? (car remaining))
+
+      (error "Unknown topological stack keyword"
+             id
+             (car remaining)))
+
+     (else
+
+      (loop (cdr remaining)
+            layout
+            gap
+            gap-seen?
+            cross-align
+            cross-align-seen?
+            (cons (car remaining)
+                  members))))))
+
+
 (define (make-constraint relation reference)
   (unless (symbol? reference)
     (error "Topological layout reference must be a symbol"
@@ -220,8 +346,94 @@
   (let ((entry (assoc key alist)))
     (and entry (cdr entry))))
 
+;; ======================================================================
+;; STACK NORMALIZATION
+;;
+;; Nested stack declarations are lifted into the global layout IR.
+;; Parent stacks retain only the logical ids of their children.
+;; ======================================================================
+
+(define (stack-entry? entry)
+  (and (list? entry)
+       (eq? (field entry 'kind) 'stack)))
+
+
+(define (flatten-one-stack stack)
+  (let loop ((remaining (field stack 'members))
+             (member-ids '())
+             (nested '()))
+
+    (if (null? remaining)
+
+        (let ((normalized-stack
+               (map
+                (lambda (entry)
+                  (if (eq? (car entry) 'members)
+                      (cons 'members
+                            (reverse member-ids))
+                      entry))
+                stack)))
+
+          (cons normalized-stack
+                (reverse nested)))
+
+        (let ((member (car remaining)))
+
+          (cond
+
+           ((symbol? member)
+
+            (loop (cdr remaining)
+                  (cons member member-ids)
+                  nested))
+
+           ((stack-entry? member)
+
+            (let* ((flattened
+                    (flatten-one-stack member))
+
+                   (nested-stack
+                    (car flattened))
+
+                   (nested-id
+                    (field nested-stack 'id)))
+
+              (loop
+               (cdr remaining)
+               (cons nested-id member-ids)
+               (append (reverse flattened)
+                       nested))))
+
+           (else
+
+            (error
+             "Topological stack member must be a node/stack id or nested stack"
+             (field stack 'id)
+             member)))))))
+
+
+(define (flatten-entries entries)
+  (append-map
+   (lambda (entry)
+     (if (stack-entry? entry)
+         (flatten-one-stack entry)
+         (list entry)))
+   entries))
+
 (define (node-by-id nodes id)
   (find (lambda (node) (eq? (field node 'id) id)) nodes))
+
+(define (stack-by-id stacks id)
+  (find
+   (lambda (stack)
+     (eq? (field stack 'id) id))
+   stacks))
+
+
+(define (entity-by-id nodes stacks id)
+  (or
+   (node-by-id nodes id)
+   (stack-by-id stacks id)))
 
 (define (node-size node)
   (let* ((id (field node 'id))
@@ -247,6 +459,217 @@
           (unless size
             (error "Missing logical UI metrics profile" id type profile))
           (cons (field size 'width) (field size 'height))))))
+
+;; ======================================================================
+;; MINIMUM VISUAL SIZE
+;;
+;; Used by the physical-fit phase.
+;; The preferred metric remains node-size; this function returns
+;; the visual-min metric for the same TYPE / variant.
+;; ======================================================================
+
+(define (node-visual-min-size node)
+
+  (let* ((id
+          (field node 'id))
+
+         (type
+          (field node 'type))
+
+         (variant
+          (field node 'variant))
+
+         (metrics
+          (ui-metrics type))
+
+         (contract
+          (if variant
+
+              (let* ((variants
+                      (field metrics 'variants))
+
+                     (entry
+                      (and variants
+                           (assoc variant variants))))
+
+                (unless entry
+                  (error
+                   "Unknown UI metrics variant"
+                   id
+                   type
+                   variant))
+
+                (cdr entry))
+
+              metrics))
+
+         (minimum
+          (field contract 'visual-min)))
+
+    (unless minimum
+      (error
+       "Missing visual-min UI metric"
+       id
+       type
+       variant))
+
+    (cons
+     (field minimum 'width)
+     (field minimum 'height))))
+
+;; ======================================================================
+;; GLOBAL MINIMUM SCALE
+;;
+;; The global scale may shrink preferred metrics, but never below
+;; the visual-min contract of any real UI component.
+;; ======================================================================
+
+(define (minimum-global-ui-scale nodes)
+
+  (fold
+
+   (lambda (node current-minimum)
+
+     (let* ((preferred
+             (node-size node))
+
+            (minimum
+             (node-visual-min-size node))
+
+            (width-ratio
+             (/ (car minimum)
+                (car preferred)))
+
+            (height-ratio
+             (/ (cdr minimum)
+                (cdr preferred))))
+
+       (max current-minimum
+            width-ratio
+            height-ratio)))
+
+   0
+   nodes))
+
+(define (scaled-node-sizes nodes scale)
+
+  (map
+
+   (lambda (node)
+
+     (let ((size
+            (node-size node)))
+
+       (cons
+        (field node 'id)
+
+        (cons
+         (* (car size) scale)
+         (* (cdr size) scale)))))
+
+   nodes))
+;; ======================================================================
+;; STACK BOUNDING BOXES
+;; ======================================================================
+
+(define (compute-one-stack-size stack sizes)
+
+  (let* ((layout
+          (field stack 'layout))
+
+         (gap
+          (field stack 'gap))
+
+         (members
+          (field stack 'members))
+
+         (member-sizes
+          (map
+           (lambda (member)
+             (let ((size
+                    (assoc-ref sizes member)))
+
+               (unless size
+                 (error
+                  "Cannot resolve topological stack member size"
+                  (field stack 'id)
+                  member))
+
+               size))
+           members)))
+
+    (if (eq? layout 'horizontal)
+
+        ;; ------------------------------------------------------
+        ;; HORIZONTAL
+        ;; ------------------------------------------------------
+
+        (cons
+         (+ (apply + (map car member-sizes))
+            (* gap
+				 (- (length members) 1)))
+
+         (apply max
+                (map cdr member-sizes)))
+
+        ;; ------------------------------------------------------
+        ;; VERTICAL
+        ;; ------------------------------------------------------
+
+        (cons
+         (apply max
+                (map car member-sizes))
+
+         (+ (apply + (map cdr member-sizes))
+            (* gap
+				 (- (length members) 1)))))))
+
+
+(define (compute-stack-sizes stacks initial-sizes)
+
+  (let loop ((pending stacks)
+             (sizes initial-sizes))
+
+    (if (null? pending)
+
+        sizes
+
+        (let ((resolvable
+               (filter
+                (lambda (stack)
+                  (every
+                   (lambda (member)
+                     (assoc member sizes))
+                   (field stack 'members)))
+                pending)))
+
+          (when (null? resolvable)
+            (error
+             "Cyclic or unresolvable topological stack dependencies"
+             pending))
+
+          (let ((new-sizes sizes))
+
+            (for-each
+             (lambda (stack)
+
+               (set! new-sizes
+                     (acons
+                      (field stack 'id)
+                      (compute-one-stack-size
+                       stack
+                       new-sizes)
+                      new-sizes)))
+
+             resolvable)
+
+            (loop
+             (filter
+              (lambda (stack)
+                (not (memq stack resolvable)))
+              pending)
+
+             new-sizes))))))
 
 ;; An edge (U V W) represents V >= U + W. Equalities are represented by
 ;; their two opposite inequalities. A positive-weight cycle is impossible.
@@ -311,28 +734,67 @@
     ((align-top align-bottom align-center-y) 'vertical)
     (else (error "Unknown hard alignment constraint" relation))))
 
-(define (alignment-edges alignment nodes sizes axis)
-  (let* ((relation (field alignment 'relation))
-         (ids (field alignment 'nodes)))
-    (if (not (eq? (alignment-axis relation) axis))
+(define (alignment-edges alignment nodes stacks sizes axis)
+
+  (let* ((relation
+          (field alignment 'relation))
+
+         (ids
+          (field alignment 'nodes)))
+
+    (if (not (eq? (alignment-axis relation)
+                  axis))
+
         '()
-        (let* ((reference-id (car ids))
-               (reference (node-by-id nodes reference-id)))
+
+        (let* ((reference-id
+                (car ids))
+
+               (reference
+                (entity-by-id
+                 nodes
+                 stacks
+                 reference-id)))
+
           (unless reference
-            (error "Missing hard alignment reference" relation reference-id))
+            (error
+             "Missing hard alignment reference"
+             relation
+             reference-id))
+
           (let ((reference-offset
-                 (alignment-offset relation
-                                   (assoc-ref sizes reference-id))))
+                 (alignment-offset
+                  relation
+                  (assoc-ref sizes
+                             reference-id))))
+
             (append-map
+
              (lambda (id)
-               (unless (node-by-id nodes id)
-                 (error "Missing hard alignment reference" relation id))
+
+               (unless
+                   (entity-by-id nodes stacks id)
+
+                 (error
+                  "Missing hard alignment reference"
+                  relation
+                  id))
+
                (let ((delta
                       (- reference-offset
-                         (alignment-offset relation (assoc-ref sizes id)))))
-                 ;; position(id) = position(reference) + delta
-                 (list (edge reference-id id delta)
-                       (edge id reference-id (- delta)))))
+                         (alignment-offset
+                          relation
+                          (assoc-ref sizes id)))))
+
+                 (list
+                  (edge reference-id
+                        id
+                        delta)
+
+                  (edge id
+                        reference-id
+                        (- delta)))))
+
              (cdr ids)))))))
 
 (define (group-cross-alignment-relation group)
@@ -351,14 +813,17 @@
               ((center) 'align-center-x)
               ((end) 'align-right)))))))
 
-(define (group-cross-alignment-edges group nodes sizes axis)
+(define (group-cross-alignment-edges group nodes stacks sizes axis)
   (let ((relation (group-cross-alignment-relation group)))
     (if relation
         (alignment-edges
-         `((kind . alignment)
-           (relation . ,relation)
-           (nodes . ,(field group 'members)))
-         nodes sizes axis)
+	 `((kind . alignment)
+	   (relation . ,relation)
+	   (nodes . ,(field group 'members)))
+	 nodes
+	 stacks
+	 sizes
+	 axis)
         '())))
 
 (define (group-edges group sizes axis)
@@ -382,6 +847,138 @@
              (list (edge previous-id current-id distance)
                    (edge current-id previous-id (- distance)))))
          (zip members (cdr members))))))
+
+;; ======================================================================
+;; STACK HARD GEOMETRY
+;;
+;; The stack id is its top-left logical origin.
+;;
+;; Child coordinates are rigidly tied to that origin.
+;; ======================================================================
+
+(define (stack-edges stack sizes axis)
+
+  (let* ((id
+          (field stack 'id))
+
+         (layout
+          (field stack 'layout))
+
+         (gap
+          (field stack 'gap))
+
+         (cross-align
+          (field stack 'cross-align))
+
+         (members
+          (field stack 'members))
+
+         (stack-size
+          (assoc-ref sizes id))
+
+         (stack-extent
+          (if (eq? axis 'horizontal)
+              (car stack-size)
+              (cdr stack-size)))
+
+         (primary-axis?
+          (eq? axis
+               (if (eq? layout 'horizontal)
+                   'horizontal
+                   'vertical))))
+
+    (if primary-axis?
+
+        ;; ======================================================
+        ;; PRIMARY AXIS
+        ;; exact sequential placement
+        ;; ======================================================
+
+        (let loop ((remaining members)
+                   (offset 0)
+                   (result '()))
+
+          (if (null? remaining)
+
+              result
+
+              (let* ((member
+                      (car remaining))
+
+                     (member-size
+                      (assoc-ref sizes member))
+
+                     (member-extent
+                      (if (eq? axis 'horizontal)
+                          (car member-size)
+                          (cdr member-size))))
+
+                (loop
+                 (cdr remaining)
+
+                 (+ offset
+                    member-extent
+                    gap)
+
+                 (append
+                  result
+
+                  (list
+                   (edge id
+                         member
+                         offset)
+
+                   (edge member
+                         id
+                         (- offset))))))))
+
+        ;; ======================================================
+        ;; CROSS AXIS
+        ;; start / center / end
+        ;; ======================================================
+
+        (append-map
+         (lambda (member)
+
+           (let* ((member-size
+                   (assoc-ref sizes member))
+
+                  (member-extent
+                   (if (eq? axis 'horizontal)
+                       (car member-size)
+                       (cdr member-size)))
+
+                  (offset
+                   (case cross-align
+
+                     ((start)
+                      0)
+
+                     ((center)
+                      (/ (- stack-extent
+                            member-extent)
+                         2))
+
+                     ((end)
+                      (- stack-extent
+                         member-extent))
+
+                     (else
+                      (error
+                       "Invalid stack cross alignment"
+                       id
+                       cross-align)))))
+
+             (list
+              (edge id
+                    member
+                    offset)
+
+              (edge member
+                    id
+                    (- offset)))))
+
+         members))))
 
 (define (cohesion-weight cohesion)
   (case cohesion
@@ -417,45 +1014,226 @@
            '())))
    groups))
 
-(define (build-axis-edges nodes alignments groups sizes axis origin)
-  (append
-   ;; Logical coordinates are one-based. This also chooses the deterministic
-   ;; earliest solution when inequalities leave free space.
-   (map (lambda (node) (edge origin (field node 'id) 1)) nodes)
-   ;; Explicit row/col values are hard anchors.
-   (append-map
-    (lambda (node)
-      (let ((anchor (field node (if (eq? axis 'horizontal) 'col 'row)))
-            (id (field node 'id)))
-        (if anchor
-            (list (edge origin id anchor)
-                  (edge id origin (- anchor)))
-            '())))
-    nodes)
-   (append-map
-    (lambda (node)
-      (append-map
-       (lambda (constraint)
-         (let* ((relation (field constraint 'relation))
-                (reference-id (field constraint 'reference))
-                (reference (node-by-id nodes reference-id)))
-           (unless reference
-             (error "Missing topological layout reference"
-                    (field node 'id) reference-id))
-           (or (constraint-edges node reference relation sizes axis) '())))
-       (field node 'constraints)))
-    nodes)
-   (append-map
-    (lambda (alignment)
-      (alignment-edges alignment nodes sizes axis))
-    alignments)
-   (append-map
-    (lambda (group)
-      (group-cross-alignment-edges group nodes sizes axis))
-    groups)
-   (append-map
-    (lambda (group) (group-edges group sizes axis))
-    groups)))
+(define (build-axis-edges
+         nodes
+         stacks
+         node-constraints
+         alignments
+         groups
+         sizes
+         axis
+         origin)
+
+  (let ((entities
+         (append nodes stacks)))
+
+    (append
+
+     ;; ==========================================================
+     ;; EVERY FIRST-CLASS ENTITY HAS AN ORIGIN LOWER BOUND
+     ;; ==========================================================
+
+     (map
+      (lambda (entity)
+        (edge origin
+              (field entity 'id)
+              1))
+      entities)
+
+
+     ;; ==========================================================
+     ;; EXPLICIT NODE row / col ANCHORS
+     ;; ==========================================================
+
+     (append-map
+
+      (lambda (node)
+
+        (let ((anchor
+               (field
+                node
+                (if (eq? axis 'horizontal)
+                    'col
+                    'row)))
+
+              (id
+               (field node 'id)))
+
+          (if anchor
+
+              (list
+               (edge origin id anchor)
+               (edge id origin (- anchor)))
+
+              '())))
+
+      nodes)
+
+
+     ;; ==========================================================
+     ;; CONSTRAINTS EMBEDDED DIRECTLY IN lt:node
+     ;; ==========================================================
+
+     (append-map
+
+      (lambda (node)
+
+        (append-map
+
+         (lambda (constraint)
+
+           (let* ((relation
+                   (field constraint 'relation))
+
+                  (reference-id
+                   (field constraint 'reference))
+
+                  (reference
+                   (entity-by-id
+                    nodes
+                    stacks
+                    reference-id)))
+
+             (unless reference
+               (error
+                "Missing topological layout reference"
+                (field node 'id)
+                reference-id))
+
+             (or
+              (constraint-edges
+               node
+               reference
+               relation
+               sizes
+               axis)
+
+              '())))
+
+         (field node 'constraints)))
+
+      nodes)
+
+
+     ;; ==========================================================
+     ;; EXTERNAL lt:constrain DECLARATIONS
+     ;;
+     ;; Target and reference can now both be NODE or STACK.
+     ;; ==========================================================
+
+     (append-map
+
+      (lambda (declaration)
+
+        (let* ((target-id
+                (field declaration 'node))
+
+               (target
+                (entity-by-id
+                 nodes
+                 stacks
+                 target-id)))
+
+          (unless target
+            (error
+             "Topological node-constraints target does not exist"
+             target-id))
+
+          (append-map
+
+           (lambda (constraint)
+
+             (let* ((relation
+                     (field constraint 'relation))
+
+                    (reference-id
+                     (field constraint 'reference))
+
+                    (reference
+                     (entity-by-id
+                      nodes
+                      stacks
+                      reference-id)))
+
+               (unless reference
+                 (error
+                  "Missing topological layout reference"
+                  target-id
+                  reference-id))
+
+               (or
+                (constraint-edges
+                 target
+                 reference
+                 relation
+                 sizes
+                 axis)
+
+                '())))
+
+           (field declaration 'constraints))))
+
+      node-constraints)
+
+
+     ;; ==========================================================
+     ;; ALIGNMENTS
+     ;; ==========================================================
+
+     (append-map
+
+      (lambda (alignment)
+        (alignment-edges
+         alignment
+         nodes
+         stacks
+         sizes
+         axis))
+
+      alignments)
+
+
+     ;; ==========================================================
+     ;; LEGACY GROUP CROSS ALIGNMENT
+     ;; ==========================================================
+
+     (append-map
+
+      (lambda (group)
+        (group-cross-alignment-edges
+         group
+         nodes
+         stacks
+         sizes
+         axis))
+
+      groups)
+
+
+     ;; ==========================================================
+     ;; LEGACY GROUP PRIMARY EDGES
+     ;; ==========================================================
+
+     (append-map
+      (lambda (group)
+        (group-edges
+         group
+         sizes
+         axis))
+      groups)
+
+
+     ;; ==========================================================
+     ;; FIRST-CLASS STACK GEOMETRY
+     ;; ==========================================================
+
+     (append-map
+      (lambda (stack)
+        (stack-edges
+         stack
+         sizes
+         axis))
+      stacks))))
 
 (define (screen-bound-edge bound origin)
   (case (car bound)
@@ -463,34 +1241,118 @@
     ((upper) (edge (cadr bound) origin (- (caddr bound))))
     (else (error "Unknown logical screen bound" bound))))
 
-(define* (solve-axis nodes alignments groups sizes axis
-                     #:optional (extra-edges '()) (extra-bounds '()))
-  (let* ((origin (gensym "layout-origin-"))
-         (vertices (cons origin (map (lambda (node) (field node 'id)) nodes)))
-         (edges (append
-                 (build-axis-edges nodes alignments groups sizes axis origin)
-                 extra-edges
-                 (map (lambda (bound) (screen-bound-edge bound origin))
-                      extra-bounds)))
-         (distances (make-hash-table)))
-    (for-each (lambda (vertex) (hashq-set! distances vertex 0)) vertices)
+(define* (solve-axis
+          nodes
+          stacks
+          node-constraints
+          alignments
+          groups
+          sizes
+          axis
+          #:optional
+          (extra-edges '())
+          (extra-bounds '()))
+
+  (let* ((origin
+          (gensym "layout-origin-"))
+
+         (entity-ids
+          (append
+           (map
+            (lambda (node)
+              (field node 'id))
+            nodes)
+
+           (map
+            (lambda (stack)
+              (field stack 'id))
+            stacks)))
+
+         (vertices
+          (cons origin
+                entity-ids))
+
+         (edges
+          (append
+
+           (build-axis-edges
+            nodes
+            stacks
+            node-constraints
+            alignments
+            groups
+            sizes
+            axis
+            origin)
+
+           extra-edges
+
+           (map
+            (lambda (bound)
+              (screen-bound-edge
+               bound
+               origin))
+            extra-bounds)))
+
+         (distances
+          (make-hash-table)))
+
+    (for-each
+     (lambda (vertex)
+       (hashq-set!
+        distances
+        vertex
+        0))
+     vertices)
+
     (let loop ((pass 0))
+
       (let ((updated? #f))
+
         (for-each
+
          (lambda (item)
-           (let* ((from (list-ref item 0))
-                  (to (list-ref item 1))
-                  (weight (list-ref item 2))
-                  (candidate (+ (hashq-ref distances from) weight)))
-             (when (> candidate (hashq-ref distances to))
-               (hashq-set! distances to candidate)
+
+           (let* ((from
+                   (list-ref item 0))
+
+                  (to
+                   (list-ref item 1))
+
+                  (weight
+                   (list-ref item 2))
+
+                  (candidate
+                   (+ (hashq-ref distances from)
+                      weight)))
+
+             (when
+                 (> candidate
+                    (hashq-ref distances to))
+
+               (hashq-set!
+                distances
+                to
+                candidate)
+
                (set! updated? #t))))
+
          edges)
+
         (cond
-         ((not updated?) distances)
-         ((>= pass (- (length vertices) 1))
-          (error "Contradictory hard positional constraints" axis))
-         (else (loop (+ pass 1))))))))
+
+         ((not updated?)
+          distances)
+
+         ((>= pass
+              (- (length vertices) 1))
+
+          (error
+           "Contradictory hard positional constraints"
+           axis))
+
+         (else
+          (loop (+ pass 1))))))))
 
 (define (area-axis-index area axis)
   (case area
@@ -604,28 +1466,170 @@
    (list '() '())
    placements))
 
-(define (solve-area-axis nodes alignments groups sizes axis screen-size
-                         extra-edges)
-  (let ((initial
-         (solve-axis nodes alignments groups sizes axis extra-edges)))
+;; ======================================================================
+;; GLOBAL SCREEN BOUNDS
+;;
+;; Every first-class entity must remain entirely inside the logical
+;; screen, independently of lt:place-in-area.
+;;
+;; Logical coordinates are one-based.
+;; ======================================================================
+
+(define (global-screen-bounds
+         nodes
+         stacks
+         sizes
+         axis
+         screen-size)
+
+  (if (not screen-size)
+
+      '()
+
+      (append-map
+
+       (lambda (entity)
+
+         (let* ((id
+                 (field entity 'id))
+
+                (size
+                 (assoc-ref sizes id))
+
+                (extent
+                 (if (eq? axis 'horizontal)
+                     (car size)
+                     (cdr size))))
+
+           (list
+
+            ;; position >= 1
+            (list 'lower
+                  id
+                  1)
+
+            ;; position + extent <= screen-size + 1
+            (list 'upper
+                  id
+                  (+ 1
+                     (- screen-size
+                        extent))))))
+
+       (append nodes stacks))))
+
+(define (solve-area-axis
+         nodes
+         stacks
+         node-constraints
+         alignments
+         groups
+         sizes
+         axis
+         screen-size
+         extra-edges)
+
+  (let* ((screen-bounds
+          (global-screen-bounds
+           nodes
+           stacks
+           sizes
+           axis
+           screen-size))
+
+         ;; ------------------------------------------------------
+         ;; First solve:
+         ;; topology + mandatory global screen containment.
+         ;; ------------------------------------------------------
+
+         (initial
+          (solve-axis
+           nodes
+           stacks
+           node-constraints
+           alignments
+           groups
+           sizes
+           axis
+           extra-edges
+           screen-bounds)))
+
     (if (not screen-size)
+
         initial
+
         (let ((placement
                (area-placement-constraints
-                (append groups
-                        (filter (lambda (node) (field node 'area)) nodes))
-                sizes axis initial screen-size)))
-          (solve-axis nodes alignments groups sizes axis
-                      (append extra-edges (car placement))
-                      (cadr placement))))))
 
-(define (try-solve-axis nodes alignments groups sizes axis screen-size
-                        extra-edges)
+                (append
+                 groups
+
+                 (filter
+                  (lambda (node)
+                    (field node 'area))
+                  nodes)
+
+                 (filter
+                  (lambda (stack)
+                    (field stack 'area))
+                  stacks))
+
+                sizes
+                axis
+                initial
+                screen-size)))
+
+          ;; ----------------------------------------------------
+          ;; Second solve:
+          ;;
+          ;; global bounds remain mandatory;
+          ;; area-specific constraints are added on top.
+          ;; ----------------------------------------------------
+
+          (solve-axis
+           nodes
+           stacks
+           node-constraints
+           alignments
+           groups
+           sizes
+           axis
+
+           (append
+            extra-edges
+            (car placement))
+
+           (append
+            screen-bounds
+            (cadr placement)))))))
+
+(define (try-solve-axis
+         nodes
+         stacks
+         node-constraints
+         alignments
+         groups
+         sizes
+         axis
+         screen-size
+         extra-edges)
+
   (catch #t
+
     (lambda ()
-      (solve-area-axis nodes alignments groups sizes axis
-                       screen-size extra-edges))
-    (lambda args #f)))
+
+      (solve-area-axis
+       nodes
+       stacks
+       node-constraints
+       alignments
+       groups
+       sizes
+       axis
+       screen-size
+       extra-edges))
+
+    (lambda args
+      #f)))
 
 (define (wish-gap wish distances)
   (let ((previous-id (list-ref wish 2))
@@ -710,8 +1714,16 @@
                  (= exact-count (list-ref best 1))
                  (> order-count (list-ref best 2)))))))
 
-(define (optimize-soft-axis nodes alignments groups sizes axis screen-size
-                            hard-result)
+(define (optimize-soft-axis
+         nodes
+         stacks
+         node-constraints
+         alignments
+         groups
+         sizes
+         axis
+         screen-size
+         hard-result)
   (let ((wishes (soft-wishes groups sizes axis)))
     (if (null? wishes)
         hard-result
@@ -727,8 +1739,16 @@
                      (exact-count (list-ref configuration 1))
                      (order-count (list-ref configuration 2))
                      (result
-                      (try-solve-axis nodes alignments groups sizes axis
-                                      screen-size edges)))
+                      (try-solve-axis
+		       nodes
+		       stacks
+		       node-constraints
+		       alignments
+		       groups
+		       sizes
+		       axis
+		       screen-size
+		       edges)))
                 (if result
                     (let ((cost (soft-axis-cost wishes result)))
                       (loop
@@ -743,6 +1763,114 @@
   (let ((ids (map (lambda (node) (field node 'id)) nodes)))
     (unless (= (length ids) (length (delete-duplicates ids eq?)))
       (error "Duplicate topological layout node id" ids))))
+
+(define (validate-stacks! stacks nodes groups)
+
+  (let* ((stack-ids
+          (map
+           (lambda (stack)
+             (field stack 'id))
+           stacks))
+
+         (node-ids
+          (map
+           (lambda (node)
+             (field node 'id))
+           nodes))
+
+         (group-ids
+          (map
+           (lambda (group)
+             (field group 'id))
+           groups))
+
+         (all-entity-ids
+          (append
+           node-ids
+           stack-ids)))
+
+    ;; ----------------------------------------------------------
+    ;; unique stack ids
+    ;; ----------------------------------------------------------
+
+    (unless
+        (= (length stack-ids)
+           (length
+            (delete-duplicates
+             stack-ids
+             eq?)))
+
+      (error
+       "Duplicate topological stack id"
+       stack-ids))
+
+    ;; ----------------------------------------------------------
+    ;; collision with nodes / legacy groups
+    ;; ----------------------------------------------------------
+
+    (for-each
+
+     (lambda (id)
+
+       (when (memq id node-ids)
+         (error
+          "Topological stack id collides with node id"
+          id))
+
+       (when (memq id group-ids)
+         (error
+          "Topological stack id collides with group id"
+          id)))
+
+     stack-ids)
+
+    ;; ----------------------------------------------------------
+    ;; members
+    ;; ----------------------------------------------------------
+
+    (for-each
+
+     (lambda (stack)
+
+       (let ((id
+              (field stack 'id))
+
+             (members
+              (field stack 'members)))
+
+         (unless (every symbol? members)
+           (error
+            "Topological stack members must be logical ids"
+            id
+            members))
+
+         (unless
+             (= (length members)
+                (length
+                 (delete-duplicates
+                  members
+                  eq?)))
+
+           (error
+            "Duplicate topological stack member"
+            id
+            members))
+
+         (for-each
+
+          (lambda (member)
+
+            (unless
+                (memq member all-entity-ids)
+
+              (error
+               "Missing topological stack member"
+               id
+               member)))
+
+          members)))
+
+     stacks)))
 
 (define (validate-groups! groups nodes)
   (let ((group-ids (map (lambda (group) (field group 'id)) groups))
@@ -762,31 +1890,86 @@
           (field group 'members))))
      groups)))
 
-(define (validate-node-area-placements! placements nodes)
-  (let ((node-ids (map (lambda (node) (field node 'id)) nodes))
-        (targets (map (lambda (placement) (field placement 'node))
-                      placements)))
-    (for-each
-     (lambda (placement)
-       (let ((target (field placement 'node))
-             (area (field placement 'area)))
-         (unless (memq target node-ids)
-           (error "Topological node-area target does not exist" target))
-         (validate-area-path! target area)))
-     placements)
-    (unless (= (length targets)
-               (length (delete-duplicates targets eq?)))
-      (error "Duplicate topological node-area target" targets))))
+(define (validate-node-area-placements!
+         placements
+         nodes
+         stacks)
 
-(define (attach-node-areas nodes placements)
+  (let ((entity-ids
+         (append
+
+          (map
+           (lambda (node)
+             (field node 'id))
+           nodes)
+
+          (map
+           (lambda (stack)
+             (field stack 'id))
+           stacks)))
+
+        (targets
+         (map
+          (lambda (placement)
+            (field placement 'node))
+          placements)))
+
+    (for-each
+
+     (lambda (placement)
+
+       (let ((target
+              (field placement 'node))
+
+             (area
+              (field placement 'area)))
+
+         (unless
+             (memq target entity-ids)
+
+           (error
+            "Topological node-area target does not exist"
+            target))
+
+         (validate-area-path!
+          target
+          area)))
+
+     placements)
+
+    (unless
+        (= (length targets)
+           (length
+            (delete-duplicates
+             targets
+             eq?)))
+
+      (error
+       "Duplicate topological node-area target"
+       targets))))
+
+(define (attach-areas entities placements)
+
   (map
-   (lambda (node)
+
+   (lambda (entity)
+
      (let ((placement
-            (find (lambda (item)
-                    (eq? (field item 'node) (field node 'id)))
-                  placements)))
-       (cons (cons 'area (and placement (field placement 'area))) node)))
-   nodes))
+            (find
+
+             (lambda (item)
+               (eq? (field item 'node)
+                    (field entity 'id)))
+
+             placements)))
+
+       (cons
+        (cons 'area
+              (and placement
+                   (field placement 'area)))
+        entity)))
+
+   entities))
 
 (define (resolved-group-soft-cost group resolved-nodes)
   (let ((cohesion (field group 'cohesion)))
@@ -845,87 +2028,513 @@
       (colSpan . ,(- right col))
       (soft-cost . ,(resolved-group-soft-cost group resolved-nodes)))))
 
-(define* (lt:solve entries #:key screen-rows screen-cols)
+(define (resolve-ui-scale scale size)
+  (ui-resolve-scale scale size))
+
+;; ======================================================================
+;; PHYSICAL UI SCALE FIT
+;;
+;; ui-scale is the DESIRED scale, not an unconditional hard scale.
+;;
+;; We first try the exact requested scale.
+;; If it cannot fit, we progressively reduce it while respecting
+;; every component's visual-min contract.
+;;
+;; First implementation:
+;;   - component sizes are elastic
+;;   - gaps remain fixed
+;;
+;; Scale fallback is quantized to 0.05 to keep rational grid
+;; refinement reasonably small and deterministic.
+;; ======================================================================
+
+(define ui-fit-scale-step 1/20)
+
+
+(define (layout-scale-feasible?
+         nodes
+         stacks
+         node-constraints
+         alignments
+         groups
+         scale
+         screen-rows
+         screen-cols)
+
+  (catch #t
+
+    (lambda ()
+
+      (let* ((node-sizes
+              (scaled-node-sizes
+               nodes
+               scale))
+
+             (sizes
+              (compute-stack-sizes
+               stacks
+               node-sizes)))
+
+        ;; Horizontal feasibility.
+        (solve-area-axis
+         nodes
+         stacks
+         node-constraints
+         alignments
+         groups
+         sizes
+         'horizontal
+         screen-cols
+         '())
+
+        ;; Vertical feasibility.
+        (solve-area-axis
+         nodes
+         stacks
+         node-constraints
+         alignments
+         groups
+         sizes
+         'vertical
+         screen-rows
+         '())
+
+        #t))
+
+    (lambda args
+      #f)))
+
+
+(define (fit-ui-scale
+         nodes
+         stacks
+         node-constraints
+         alignments
+         groups
+         requested-scale
+         screen-rows
+         screen-cols)
+
+  (let ((minimum-scale
+         (minimum-global-ui-scale
+          nodes)))
+
+    (when (< requested-scale
+             minimum-scale)
+
+      (error
+       "Requested ui-scale is below UI visual minimum"
+       requested-scale
+       minimum-scale))
+
+    ;; ----------------------------------------------------------
+    ;; First try exactly what the user requested.
+    ;; ----------------------------------------------------------
+
+    (if (layout-scale-feasible?
+         nodes
+         stacks
+         node-constraints
+         alignments
+         groups
+         requested-scale
+         screen-rows
+         screen-cols)
+
+        requested-scale
+
+        ;; ------------------------------------------------------
+        ;; Requested scale does not fit.
+        ;;
+        ;; Search downward in deterministic 0.05 increments.
+        ;; ------------------------------------------------------
+
+        (let* ((step
+                ui-fit-scale-step)
+
+               (first-candidate
+                (* step
+                   (floor
+                    (/ requested-scale
+                       step))))
+
+               (first-candidate
+                (if (= first-candidate
+                       requested-scale)
+
+                    (- first-candidate
+                       step)
+
+                    first-candidate)))
+
+          (let loop ((candidate
+                      first-candidate))
+
+            (cond
+
+             ;; -------------------------------------------------
+             ;; We crossed the minimum.
+             ;; Try the exact minimum once.
+             ;; -------------------------------------------------
+
+             ((< candidate
+                 minimum-scale)
+
+              (if (layout-scale-feasible?
+                   nodes
+                   stacks
+                   node-constraints
+                   alignments
+                   groups
+                   minimum-scale
+                   screen-rows
+                   screen-cols)
+
+                  minimum-scale
+
+                  (error
+                   "Topological layout cannot fit inside logical screen even at visual-min scale"
+                   screen-cols
+                   screen-rows
+                   minimum-scale)))
+
+             ;; -------------------------------------------------
+             ;; Largest feasible candidate wins.
+             ;; -------------------------------------------------
+
+             ((layout-scale-feasible?
+               nodes
+               stacks
+               node-constraints
+               alignments
+               groups
+               candidate
+               screen-rows
+               screen-cols)
+
+              candidate)
+
+             (else
+
+              (loop
+               (- candidate
+                  step)))))))))
+
+(define* (lt:solve
+          entries
+          #:key
+          screen-rows
+          screen-cols
+          (ui-scale #f)
+          (ui-size #f))
   (unless (list? entries)
-    (error "Topological layout input must be a list" entries))
-  (unless (every (lambda (entry)
-                   (memq (field entry 'kind)
-                         '(node alignment group node-area)))
-                 entries)
-    (error "Invalid topological layout IR entry" entries))
-  (let* ((raw-nodes
-          (filter (lambda (entry) (eq? (field entry 'kind) 'node)) entries))
-        (alignments
-         (filter (lambda (entry) (eq? (field entry 'kind) 'alignment))
-                 entries))
-        (groups (filter (lambda (entry) (eq? (field entry 'kind) 'group))
-                        entries))
-         (node-area-placements
-          (filter (lambda (entry) (eq? (field entry 'kind) 'node-area))
-                  entries)))
-  (validate-node-ids! raw-nodes)
-  (validate-groups! groups raw-nodes)
-  (validate-node-area-placements! node-area-placements raw-nodes)
-  (let ((nodes (attach-node-areas raw-nodes node-area-placements))
-        (area-groups (filter (lambda (group) (field group 'area)) groups)))
-    (when (or screen-rows screen-cols
-              (not (null? area-groups))
-              (not (null? node-area-placements)))
-      (unless (and screen-rows screen-cols)
-        (error "Logical screen rows and columns are both required"
-               screen-rows screen-cols))
-      (unless (and (integer? screen-rows) (exact? screen-rows)
-                   (> screen-rows 0)
-                   (integer? screen-cols) (exact? screen-cols)
-                   (> screen-cols 0))
-        (error "Logical screen dimensions must be positive exact integers"
-               screen-rows screen-cols)))
-  (let* ((sizes (map (lambda (node)
-                       (cons (field node 'id) (node-size node)))
-                     nodes))
-         ;; Phase 1: authoritative hard validation and earliest hard solution.
-         (hard-columns
-          (solve-area-axis nodes alignments groups sizes 'horizontal
-                           screen-cols '()))
-         (hard-rows
-          (solve-area-axis nodes alignments groups sizes 'vertical
-                           screen-rows '()))
-         ;; Phase 2: finite soft optimization among hard-valid solutions.
-         (columns
-          (optimize-soft-axis nodes alignments groups sizes
-                              'horizontal screen-cols hard-columns))
-         (rows
-          (optimize-soft-axis nodes alignments groups sizes
-                              'vertical screen-rows hard-rows))
-         (resolved-nodes
-          (map
-           (lambda (node)
-             (let* ((id (field node 'id))
-                    (size (assoc-ref sizes id)))
-               `((id . ,id)
-                 (type . ,(field node 'type))
-                 (variant . ,(field node 'variant))
-                 (profile . ,(field node 'profile))
-                 (row . ,(hashq-ref rows id))
-                 (col . ,(hashq-ref columns id))
-                 (rowSpan . ,(cdr size))
-                 (colSpan . ,(car size)))))
-           nodes))
-         (resolved-groups
-          (map (lambda (group) (resolved-group group resolved-nodes))
-               groups))
-         (soft-groups
-          (filter (lambda (group) (field group 'cohesion))
-                  resolved-groups))
-         (total-soft-cost
-          (fold (lambda (group total)
-                  (add-soft-cost total (field group 'soft-cost)))
-                (make-soft-cost 0 0)
-                soft-groups)))
-    (append resolved-nodes
-            resolved-groups
-            (if (null? soft-groups)
-                '()
-                (list
-                 `((kind . solver-metadata)
-                   (soft-cost . ,total-soft-cost)))))))))
+    (error
+     "Topological layout input must be a list"
+     entries))
+
+  ;; ============================================================
+  ;; Lift nested stacks into the global IR.
+  ;; ============================================================
+
+  (let* ((entries
+          (flatten-entries entries)))
+
+    (unless
+        (every
+         (lambda (entry)
+           (memq
+            (field entry 'kind)
+            '(node
+              alignment
+              group
+              stack
+              node-area
+              node-constraints)))
+         entries)
+
+      (error
+       "Invalid topological layout IR entry"
+       entries))
+
+    (let* ((raw-nodes
+            (filter
+             (lambda (entry)
+               (eq? (field entry 'kind)
+                    'node))
+             entries))
+
+           (raw-stacks
+            (filter
+             (lambda (entry)
+               (eq? (field entry 'kind)
+                    'stack))
+             entries))
+
+           (alignments
+            (filter
+             (lambda (entry)
+               (eq? (field entry 'kind)
+                    'alignment))
+             entries))
+
+           (groups
+            (filter
+             (lambda (entry)
+               (eq? (field entry 'kind)
+                    'group))
+             entries))
+
+           (node-constraints
+            (filter
+             (lambda (entry)
+               (eq? (field entry 'kind)
+                    'node-constraints))
+             entries))
+
+           (node-area-placements
+            (filter
+             (lambda (entry)
+               (eq? (field entry 'kind)
+                    'node-area))
+             entries)))
+
+      ;; ========================================================
+      ;; VALIDATION
+      ;; ========================================================
+
+      (validate-node-ids!
+       raw-nodes)
+
+      (validate-groups!
+       groups
+       raw-nodes)
+
+      (validate-stacks!
+       raw-stacks
+       raw-nodes
+       groups)
+
+      (validate-node-area-placements!
+       node-area-placements
+       raw-nodes
+       raw-stacks)
+
+      ;; ========================================================
+      ;; ATTACH AREA METADATA
+      ;; ========================================================
+
+      (let* ((nodes
+              (attach-areas
+               raw-nodes
+               node-area-placements))
+
+             (stacks
+              (attach-areas
+               raw-stacks
+               node-area-placements))
+
+             (area-groups
+              (filter
+               (lambda (group)
+                 (field group 'area))
+               groups)))
+
+        ;; ======================================================
+        ;; SCREEN VALIDATION
+        ;; ======================================================
+
+        (when
+            (or screen-rows
+                screen-cols
+                (not (null? area-groups))
+                (not (null? node-area-placements)))
+
+          (unless
+              (and screen-rows
+                   screen-cols)
+
+            (error
+             "Logical screen rows and columns are both required"
+             screen-rows
+             screen-cols))
+
+          (unless
+              (and
+               (integer? screen-rows)
+               (exact? screen-rows)
+               (> screen-rows 0)
+
+               (integer? screen-cols)
+               (exact? screen-cols)
+               (> screen-cols 0))
+
+            (error
+             "Logical screen dimensions must be positive exact integers"
+             screen-rows
+             screen-cols)))
+
+        ;; ======================================================
+        ;; NODE + STACK SIZES
+        ;; ======================================================
+
+	(let* ((requested-scale
+		(resolve-ui-scale
+		 ui-scale
+		 ui-size))
+
+	       ;; ======================================================
+	       ;; PHYSICAL FIT
+	       ;;
+	       ;; requested-scale is the user's preference.
+	       ;; actual-scale is the largest scale that physically fits.
+	       ;; ======================================================
+
+	       (actual-scale
+		(if (and screen-rows
+			 screen-cols)
+
+		    (fit-ui-scale
+		     nodes
+		     stacks
+		     node-constraints
+		     alignments
+		     groups
+		     requested-scale
+		     screen-rows
+		     screen-cols)
+
+		    requested-scale))
+
+	       (node-sizes
+		(scaled-node-sizes
+		 nodes
+		 actual-scale))
+
+	       (sizes
+		(compute-stack-sizes
+		 stacks
+		 node-sizes))
+
+               ;; =================================================
+               ;; HARD SOLUTION
+               ;; =================================================
+
+               (hard-columns
+                (solve-area-axis
+                 nodes
+                 stacks
+                 node-constraints
+                 alignments
+                 groups
+                 sizes
+                 'horizontal
+                 screen-cols
+                 '()))
+
+               (hard-rows
+                (solve-area-axis
+                 nodes
+                 stacks
+                 node-constraints
+                 alignments
+                 groups
+                 sizes
+                 'vertical
+                 screen-rows
+                 '()))
+
+               ;; =================================================
+               ;; SOFT GROUP OPTIMIZATION
+               ;; =================================================
+
+               (columns
+                (optimize-soft-axis
+                 nodes
+                 stacks
+                 node-constraints
+                 alignments
+                 groups
+                 sizes
+                 'horizontal
+                 screen-cols
+                 hard-columns))
+
+               (rows
+                (optimize-soft-axis
+                 nodes
+                 stacks
+                 node-constraints
+                 alignments
+                 groups
+                 sizes
+                 'vertical
+                 screen-rows
+                 hard-rows))
+
+               ;; =================================================
+               ;; ONLY REAL NODES ARE EMITTED
+               ;;
+               ;; stacks remain compile-time layout entities.
+               ;; =================================================
+
+               (resolved-nodes
+                (map
+
+                 (lambda (node)
+
+                   (let* ((id
+                           (field node 'id))
+
+                          (size
+                           (assoc-ref sizes id)))
+
+                     `((id . ,id)
+                       (type . ,(field node 'type))
+                       (variant . ,(field node 'variant))
+                       (profile . ,(field node 'profile))
+                       (row . ,(hashq-ref rows id))
+                       (col . ,(hashq-ref columns id))
+                       (rowSpan . ,(cdr size))
+                       (colSpan . ,(car size)))))
+
+                 nodes))
+
+               (resolved-groups
+                (map
+                 (lambda (group)
+                   (resolved-group
+                    group
+                    resolved-nodes))
+                 groups))
+
+               (soft-groups
+                (filter
+                 (lambda (group)
+                   (field group 'cohesion))
+                 resolved-groups))
+
+               (total-soft-cost
+                (fold
+
+                 (lambda (group total)
+                   (add-soft-cost
+                    total
+                    (field group
+                           'soft-cost)))
+
+                 (make-soft-cost 0 0)
+
+                 soft-groups)))
+
+          (append
+           resolved-nodes
+           resolved-groups
+
+           (if (null? soft-groups)
+
+               '()
+
+               (list
+                `((kind . solver-metadata)
+                  (soft-cost .
+                             ,total-soft-cost))))))))))
