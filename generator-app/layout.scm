@@ -66,7 +66,7 @@
 standardScreenWidth = ~a;
 standardScreenHeight = standardScreenWidth / screenRatio;
 "
-            ratio
+            (exact->inexact ratio)
             width)))
 
 (define (component-model->layout-model model)
