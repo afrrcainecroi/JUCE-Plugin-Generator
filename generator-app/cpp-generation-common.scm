@@ -297,6 +297,7 @@
 (define-public (slider-kinetic-properties->cpp model)
   (let ((var         (assoc-ref model 'var))
         (title       (assoc-ref model 'title))
+        (tooltip     (assoc-ref model 'tooltip))
         (value-type  (assoc-ref model 'value-type))
         (suffix      (assoc-ref model 'suffix))
         (show-value  (assoc-ref model 'show-value))
@@ -312,6 +313,13 @@
          (format #f
                  "~a.getProperties().set(\"title\", \"~a\");~%"
                  var (cpp-string title))
+         "")
+     ;; tooltip
+     (if (and tooltip
+              (not (string-null? tooltip)))
+         (format #f
+                 "~a.setTooltip(\"~a\");~%"
+                 var (cpp-string tooltip))
          "")
      ;; valueType
      (if value-type

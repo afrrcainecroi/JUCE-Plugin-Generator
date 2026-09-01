@@ -36,7 +36,10 @@
     oversampling
     input-meter
     output-meter
-    scope))
+    scope
+    delta-monitor
+    safety-limiter
+    safety-limiter-ceiling))
 
 (define (error message . args)
   (scm-error 'misc-error

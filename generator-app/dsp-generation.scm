@@ -43,6 +43,22 @@
    (assoc-ref (scope-model) 'var)
    (if (eq? tap 'pre-dsp) "PreDsp" "PostDsp")))
 
+(define (dry-reference-required?)
+  (or (role-present? 'wet-dry)
+      (role-present? 'delta-monitor)))
+
+(define (safety-limiter-models)
+  (let ((limiter (role-model 'safety-limiter))
+        (ceiling (role-model 'safety-limiter-ceiling)))
+    (cond
+     ((and limiter ceiling)
+      (cons limiter ceiling))
+     ((or limiter ceiling)
+      (error
+       "Safety Limiter requires both safety-limiter and safety-limiter-ceiling roles"))
+     (else
+      #f))))
+
 (define-public (generate-process-code)
   (string-append
    (generate-process-input-meter)
@@ -58,6 +74,7 @@
    (generate-process-wetdry-postfix)
    (generate-process-scope-tap 'post-dsp)
    (generate-process-output-gain)
+   (generate-process-safety-limiter)
    (generate-process-output-meter)
    ))
 
@@ -353,6 +370,44 @@
                   ref))
         "")))
 
+(define (generate-process-safety-limiter)
+  (let ((models (safety-limiter-models)))
+    (if models
+        (let ((limiter-ref
+               (assoc-ref (car models) 'processor-reference))
+              (ceiling-ref
+               (assoc-ref (cdr models) 'processor-reference)))
+          (format #f
+"    // SAFETY LIMITER
+    if (value_~a >= 0.5f)
+    {
+        // JUCE's limiter has a fixed -10 dB first stage and +10 dB
+        // internal makeup at the configured -6.25 dB threshold.
+        // Map the selected ceiling to that first-stage threshold,
+        // then map the final hard clip back to the requested ceiling.
+        const auto safetyLimiterCeilingGain =
+            juce::Decibels::decibelsToGain(value_~a);
+
+        const auto safetyLimiterInputGain =
+            juce::Decibels::decibelsToGain(
+                -10.0f - value_~a);
+
+        buffer.applyGain(safetyLimiterInputGain);
+
+        juce::dsp::AudioBlock<float> safetyLimiterBlock(buffer);
+        juce::dsp::ProcessContextReplacing<float>
+            safetyLimiterContext(safetyLimiterBlock);
+
+        generatedSafetyLimiter.process(safetyLimiterContext);
+        buffer.applyGain(safetyLimiterCeilingGain);
+    }
+
+"
+                  limiter-ref
+                  ceiling-ref
+                  ceiling-ref))
+        "")))
+
 (define (generate-process-input-gain)
   (let ((model (find-component-by-role 'input-gain)))
     (if model
@@ -521,7 +576,7 @@
 
 
 (define-public (generate-process-wetdry-prefix)
-  (if (role-present? 'wet-dry)
+  (if (dry-reference-required?)
       "    // DRY COPY
     for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
         dryBuffer.copyFrom(
@@ -534,12 +589,128 @@
       ""))
 
 (define (generate-process-wetdry-postfix)
-  (let ((model (role-model 'wet-dry)))
-    (if model
-        (let* ((ref (assoc-ref model 'processor-reference))
-               (min (assoc-ref model 'min))
-               (max (assoc-ref model 'max)))
-          (format #f
+  (let ((wetdry-model
+         (role-model 'wet-dry))
+        (delta-model
+         (role-model 'delta-monitor)))
+
+    (cond
+
+     ;; ==========================================================
+     ;; DELTA MONITOR + WET/DRY
+     ;;
+     ;; DELTA is a monitoring mode:
+     ;;
+     ;;   delta OFF -> normal wet/dry mix
+     ;;   delta ON  -> aligned wet - aligned dry
+     ;;
+     ;; Wet/Dry is intentionally ignored while DELTA is active.
+     ;; ==========================================================
+
+     ((and wetdry-model delta-model)
+      (let* ((wet-ref
+              (assoc-ref wetdry-model 'processor-reference))
+             (wet-min
+              (assoc-ref wetdry-model 'min))
+             (wet-max
+              (assoc-ref wetdry-model 'max))
+             (delta-ref
+              (assoc-ref delta-model 'processor-reference)))
+
+        (format #f
+"    // DELTA MONITOR / WET-DRY
+    if (value_~a >= 0.5f)
+    {
+        // Monitor only what the DSP changed:
+        //     DELTA = aligned wet - aligned dry
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        {
+            auto* wet = buffer.getWritePointer(ch);
+            const auto* dry = dryBuffer.getReadPointer(ch);
+            const int numSamples = buffer.getNumSamples();
+
+            juce::FloatVectorOperations::addWithMultiply(
+                wet,
+                dry,
+                -1.0f,
+                numSamples);
+        }
+    }
+    else
+    {
+        const float wetMix =
+            juce::jlimit(
+                0.0f,
+                1.0f,
+                (value_~a - ~af) / (~af - ~af));
+
+        const float dryMix = 1.0f - wetMix;
+
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        {
+            auto* wet = buffer.getWritePointer(ch);
+            const auto* dry = dryBuffer.getReadPointer(ch);
+            const int numSamples = buffer.getNumSamples();
+
+            juce::FloatVectorOperations::multiply(
+                wet,
+                wetMix,
+                numSamples);
+
+            juce::FloatVectorOperations::addWithMultiply(
+                wet,
+                dry,
+                dryMix,
+                numSamples);
+        }
+    }
+
+"
+                delta-ref
+                wet-ref wet-min wet-max wet-min)))
+
+     ;; ==========================================================
+     ;; DELTA MONITOR ONLY
+     ;; ==========================================================
+
+     (delta-model
+      (let ((delta-ref
+             (assoc-ref delta-model 'processor-reference)))
+
+        (format #f
+"    // DELTA MONITOR
+    if (value_~a >= 0.5f)
+    {
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        {
+            auto* wet = buffer.getWritePointer(ch);
+            const auto* dry = dryBuffer.getReadPointer(ch);
+            const int numSamples = buffer.getNumSamples();
+
+            juce::FloatVectorOperations::addWithMultiply(
+                wet,
+                dry,
+                -1.0f,
+                numSamples);
+        }
+    }
+
+"
+                delta-ref)))
+
+     ;; ==========================================================
+     ;; WET/DRY ONLY -- preserve previous generated behaviour.
+     ;; ==========================================================
+
+     (wetdry-model
+      (let* ((ref
+              (assoc-ref wetdry-model 'processor-reference))
+             (min
+              (assoc-ref wetdry-model 'min))
+             (max
+              (assoc-ref wetdry-model 'max)))
+
+        (format #f
 "    // WET / DRY MIX
     {
         const float wetMix =
@@ -570,8 +741,11 @@
     }
 
 "
-                  ref min max min))
-        "")))
+                ref min max min)))
+
+     (else
+      ""))))
+
 
 (define-public (generate-timer-code)
   (string-append
@@ -641,6 +815,10 @@
    (if (scope-has-tap? 'post-dsp)
        (let ((base (scope-resource-base 'post-dsp)))
          (format #f "std::array<std::atomic<float>, 128> ~aFifo {};~%std::atomic<int> ~aWriteIdx { 0 };~%" base base))
+       "")
+
+   (if (safety-limiter-models)
+       "juce::dsp::Limiter<float> generatedSafetyLimiter;\n"
        "")
 
    (generate-oversampling-runtime-members-code)
@@ -1551,6 +1729,7 @@ private:
     }
 
 "
+   (generate-safety-limiter-prepare-code)
    (if (fft-enabled?)
        "
 
@@ -1636,6 +1815,7 @@ private:
     realPlugin4x->reset();
     realPlugin8x->reset();
 "
+   (generate-safety-limiter-reset-code)
    (if (fft-enabled?)
        "
     stft256.reset();
@@ -1653,6 +1833,36 @@ private:
     fftProcessor8192.resetFFT();
 "
        "")))
+
+(define (generate-safety-limiter-prepare-code)
+  (if (safety-limiter-models)
+      "
+    // ==========================================================
+    // SAFETY LIMITER (host sample rate, no oversampling)
+    // ==========================================================
+
+    {
+        juce::dsp::ProcessSpec safetyLimiterSpec;
+        safetyLimiterSpec.sampleRate = hostSampleRate;
+        safetyLimiterSpec.maximumBlockSize =
+            static_cast<juce::uint32>(hostMaximumBlockSize);
+        safetyLimiterSpec.numChannels =
+            static_cast<juce::uint32>(audioChannels);
+
+        processor->generatedSafetyLimiter.setThreshold(-6.25f);
+        processor->generatedSafetyLimiter.setRelease(100.0f);
+        processor->generatedSafetyLimiter.prepare(safetyLimiterSpec);
+    }
+
+"
+      ""))
+
+(define (generate-safety-limiter-reset-code)
+  (if (safety-limiter-models)
+      "
+    processor->generatedSafetyLimiter.reset();
+"
+      ""))
 
 
 
@@ -1808,7 +2018,7 @@ private:
 
 (define-public (generate-process-dry-latency-code)
   (if (and
-       (role-present? 'wet-dry)
+       (dry-reference-required?)
        (latency-infrastructure-required?))
 
       "

@@ -396,7 +396,8 @@
                (field screen-model 'ui-size))
 
               (policy
-               (standard-physical-layout-policy))
+               (standard-physical-layout-policy
+                #:normalized normalized))
 
               (physical-layout
                (pl:solve
