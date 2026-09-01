@@ -195,8 +195,11 @@
 (define (pl:size-contract
          type
          variant
+         profile
          base-unit-px
-         ui-scale)
+         ui-scale
+         width-scale
+         height-scale)
 
   (let* ((unit
           (pl:resolve-base-unit
@@ -206,6 +209,9 @@
           (pl:resolve-ui-scale
            ui-scale))
 
+         (eff-unit-x (* unit width-scale))
+         (eff-unit-y (* unit height-scale))
+
          (contract
           (pl:metric-contract
            type
@@ -214,55 +220,46 @@
          (visual-min
           (field contract 'visual-min))
 
-         (preferred
-          (field contract 'preferred))
-
          (useful-max
-          (field contract 'useful-max)))
+          (field contract 'useful-max))
+          
+         (profile-metrics
+          (if variant
+              (ui-profile type variant profile)
+              (ui-profile type profile))))
 
     (unless visual-min
-      (error
-       "UI metric has no visual-min"
-       type
-       variant))
-
-    (unless preferred
-      (error
-       "UI metric has no preferred size"
-       type
-       variant))
-
+      (error "UI metric has no visual-min" type variant))
     (unless useful-max
-      (error
-       "UI metric has no useful-max"
-       type
-       variant))
+      (error "UI metric has no useful-max" type variant))
+    (unless profile-metrics
+      (error "UI metric has no matching profile" type variant profile))
 
     (let* ((min-width
-            (* unit
+            (* eff-unit-x
                (field visual-min 'width)))
 
            (min-height
-            (* unit
+            (* eff-unit-y
                (field visual-min 'height)))
 
            (scaled-preferred-width
-            (* unit
+            (* eff-unit-x
                scale
-               (field preferred 'width)))
+               (field profile-metrics 'width)))
 
            (scaled-preferred-height
-            (* unit
+            (* eff-unit-y
                scale
-               (field preferred 'height)))
+               (field profile-metrics 'height)))
 
            (scaled-max-width
-            (* unit
+            (* eff-unit-x
                scale
                (field useful-max 'width)))
 
            (scaled-max-height
-            (* unit
+            (* eff-unit-y
                scale
                (field useful-max 'height)))
 
@@ -293,27 +290,125 @@
         (max-width . ,max-width)
         (max-height . ,max-height)))))
 
-
-;; ======================================================================
-;; TARGET SIZE
-;; ======================================================================
-
 (define (pl:target-size
          type
          variant
+         profile
          base-unit-px
-         ui-scale)
+         ui-scale
+         width-scale
+         height-scale)
 
   (let ((contract
          (pl:size-contract
           type
           variant
+          profile
           base-unit-px
-          ui-scale)))
+          ui-scale
+          width-scale
+          height-scale)))
 
     (cons
      (field contract 'preferred-width)
      (field contract 'preferred-height))))
+
+(define (pl:resolve-size-contracts
+         nodes
+         stacks
+         base-unit-px
+         ui-scale)
+
+  ;; ------------------------------------------------------------
+  ;; Real UI nodes first
+  ;; ------------------------------------------------------------
+
+  (let ((initial-contracts
+
+         (map
+
+          (lambda (node)
+
+            (cons
+             (field node 'id)
+
+             (pl:size-contract
+              (field node 'type)
+              (field node 'variant)
+              (field node 'profile)
+              base-unit-px
+              ui-scale
+              (field node 'width-scale)
+              (field node 'height-scale))))
+
+          nodes)))
+
+    ;; ----------------------------------------------------------
+    ;; Then resolve stack contracts bottom-up.
+    ;; ----------------------------------------------------------
+
+    (let loop ((pending stacks)
+               (contracts initial-contracts))
+
+      (if (null? pending)
+
+          contracts
+
+          (let ((resolvable
+
+                 (filter
+
+                  (lambda (stack)
+
+                    (every
+                     (lambda (member)
+                       (assoc member contracts))
+                     (field stack 'members)))
+
+                  pending)))
+
+        (when (null? resolvable)
+
+          (error
+           "Cyclic or unresolvable physical stack dependencies"
+           pending))
+
+        (let ((new-contracts
+               contracts))
+
+          (for-each
+
+           (lambda (stack)
+
+             (set! new-contracts
+
+                   (acons
+                    (field stack 'id)
+
+                    (pl:stack-size-contract
+                     stack
+                     new-contracts
+                     base-unit-px)
+
+                    new-contracts)))
+
+           resolvable)
+
+          (loop
+
+           (filter
+            (lambda (stack)
+              (not (memq stack resolvable)))
+            pending)
+
+           new-contracts)))))))
+
+
+;; ======================================================================
+;; TARGET SIZE
+;; ======================================================================
+
+
 
 
 ;; ======================================================================
@@ -606,92 +701,7 @@
 ;; Nested stacks are resolved bottom-up.
 ;; ======================================================================
 
-(define (pl:resolve-size-contracts
-         nodes
-         stacks
-         base-unit-px
-         ui-scale)
 
-  ;; ------------------------------------------------------------
-  ;; Real UI nodes first
-  ;; ------------------------------------------------------------
-
-  (let ((initial-contracts
-
-         (map
-
-          (lambda (node)
-
-            (cons
-             (field node 'id)
-
-             (pl:size-contract
-              (field node 'type)
-              (field node 'variant)
-              base-unit-px
-              ui-scale)))
-
-          nodes)))
-
-    ;; ----------------------------------------------------------
-    ;; Then resolve stack contracts bottom-up.
-    ;; ----------------------------------------------------------
-
-    (let loop ((pending stacks)
-               (contracts initial-contracts))
-
-      (if (null? pending)
-
-          contracts
-
-          (let ((resolvable
-
-                 (filter
-
-                  (lambda (stack)
-
-                    (every
-                     (lambda (member)
-                       (assoc member contracts))
-                     (field stack 'members)))
-
-                  pending)))
-
-        (when (null? resolvable)
-
-          (error
-           "Cyclic or unresolvable physical stack dependencies"
-           pending))
-
-        (let ((new-contracts
-               contracts))
-
-          (for-each
-
-           (lambda (stack)
-
-             (set! new-contracts
-
-                   (acons
-                    (field stack 'id)
-
-                    (pl:stack-size-contract
-                     stack
-                     new-contracts
-                     base-unit-px)
-
-                    new-contracts)))
-
-           resolvable)
-
-          (loop
-
-           (filter
-            (lambda (stack)
-              (not (memq stack resolvable)))
-            pending)
-
-           new-contracts)))))))
 
   
 ;; ======================================================================

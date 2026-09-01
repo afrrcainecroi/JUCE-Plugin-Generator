@@ -12,6 +12,11 @@
 	    ;; Identificatore logico stabile del componente
 	    (id #f)
 	    (role #f)
+	    ;; Profilo metrico esplicito (override del default)
+	    (profile #f)
+	    ;; Override dimensionale locale (numeri esatti per default)
+	    (width-scale 1)
+	    (height-scale 1)
 	    ;; Layout.
 	    ;; In futuro row/col potranno essere calcolati dal layout solver.
 	    (row #f)
@@ -449,6 +454,9 @@
   `((id        . ,(component:id c))
     (type      . ,(component-type c))
     (role      . ,(component:role c))
+    (profile   . ,(component:profile c))
+    (width-scale . ,(component:width-scale c))
+    (height-scale . ,(component:height-scale c))
     (row       . ,(component:row c))
     (col       . ,(component:col c))
     (rowSpan   . ,(component:row-span c))

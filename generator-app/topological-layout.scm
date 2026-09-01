@@ -25,7 +25,8 @@
 ;; Experimental logical layout IR. It is intentionally independent from the
 ;; component DSL, the JUCE grid emitter, screen dimensions and pixels.
 (define* (lt:node id type profile
-                  #:key (variant #f) row col (constraints '()))
+                  #:key (variant #f) row col (constraints '())
+                  (width-scale 1) (height-scale 1))
   (unless (symbol? id)
     (error "Topological layout node id must be a symbol" id))
   (unless (symbol? type)
@@ -38,14 +39,25 @@
   (unless (and (or (not row) (integer? row))
                (or (not col) (integer? col)))
     (error "Topological layout anchors must be integers" id row col))
-  `((kind . node)
-    (id . ,id)
-    (type . ,type)
-    (variant . ,variant)
-    (profile . ,profile)
-    (row . ,row)
-    (col . ,col)
-    (constraints . ,constraints)))
+  
+  ;; Validazione e quantizzazione razionale esatta degli scaler
+  (let ((w-scale (if (exact? width-scale) width-scale (rationalize (inexact->exact width-scale) 1/1000000)))
+        (h-scale (if (exact? height-scale) height-scale (rationalize (inexact->exact height-scale) 1/1000000))))
+    (unless (and (number? w-scale) (> w-scale 0))
+      (error "width-scale must be a positive number" id w-scale))
+    (unless (and (number? h-scale) (> h-scale 0))
+      (error "height-scale must be a positive number" id h-scale))
+      
+    `((kind . node)
+      (id . ,id)
+      (type . ,type)
+      (variant . ,variant)
+      (profile . ,profile)
+      (width-scale . ,w-scale)
+      (height-scale . ,h-scale)
+      (row . ,row)
+      (col . ,col)
+      (constraints . ,constraints))))
 
 (define area-symbols
   '(top-left top top-right

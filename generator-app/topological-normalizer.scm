@@ -150,7 +150,11 @@
   (let* ((id (normalize-logical-id (field model 'id)))
          (metric-type (dsl-model->metric-type model))
          (variant (component-metric-variant model metric-type))
-         (profile (preferred-metric-profile metric-type variant))
+         (requested-profile (field model 'profile))
+         (profile (or requested-profile 
+                      (preferred-metric-profile metric-type variant)))
+         (width-scale (or (field model 'width-scale) 1))
+         (height-scale (or (field model 'height-scale) 1))
          (row (field model 'row))
          (col (field model 'col)))
     ;; rowSpan/colSpan in MODEL are intentionally ignored: lt:node resolves
@@ -158,7 +162,9 @@
     (lt:node id metric-type profile
              #:variant variant
              #:row row
-             #:col col)))
+             #:col col
+             #:width-scale width-scale
+             #:height-scale height-scale)))
 
 (define (normalize-topological-component component)
   (normalize-topological-model (component->model component)))
