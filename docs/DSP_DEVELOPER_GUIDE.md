@@ -13,7 +13,7 @@ It defines:
 - generator-managed FFT, oversampling, wet/dry, bypass, meters, scope, and fixed timing;
 - mandatory realtime rules.
 
-The Scheme DSL is documented in `DSL_REFERENCE.md`. Frozen architecture decisions are in `ARCHITECTURE_DECISIONS.md`. Generated pppbuttavia is evidence of generator output, not authoritative source.
+The Scheme DSL is documented in `DSL_REFERENCE.md`. Frozen architecture decisions are in `ARCHITECTURE_DECISIONS.md`. Frozen `YAEnhancerR1`, post-freeze `YASaturatorR1`, and historical pppbuttavia are generated evidence, not generator authority.
 
 ## 2. DSP ownership model
 
@@ -76,9 +76,10 @@ HOST INPUT
  -> time-domain RealPlugin at selected factor
  -> wet-path fixed-latency compensation
  -> dry-path fixed-latency compensation
- -> linear wet/dry mix
+ -> linear wet/dry mix or DELTA (aligned wet - aligned dry)
  -> POST-DSP SCOPE TAP
  -> OUTPUT GAIN
+ -> optional sample-peak SAFETY LIMITER
  -> OUTPUT METER
  -> HOST OUTPUT
 ```
@@ -95,6 +96,7 @@ Relevant generators are:
 - `generate-process-dry-latency-code`;
 - `generate-process-wetdry-postfix`;
 - `generate-process-output-gain`;
+- `generate-process-safety-limiter`;
 - `generate-process-output-meter`.
 
 FFT is at host sample rate and precedes oversampling. The developer does not reproduce this orchestration in `PluginDSP.h`. Reordering stages is a generator architecture change.
@@ -233,7 +235,7 @@ juce::dsp::AudioBlock<float>&
 
 It is a non-owning view of either the host `AudioBuffer<float>` at 1x or JUCE’s oversampler output at 2x/4x/8x. Process it in place through `getChannelPointer`, `getSample`/`setSample`, or bounded AudioBlock operations.
 
-Do not resize it, retain pointers after return, or assume the same address/block length on the next callback. Mono and stereo are the supported processor layouts; code should honor the actual block channel count.
+Do not resize it, retain pointers after return, or assume the same address/block length on the next callback. Mono and stereo are the officially supported Release 1.0 layouts. When the algorithm is naturally channel-independent, iterate `block.getNumChannels()` and avoid hard-coded stereo; this policy does not imply that 5.1/7.1 bus topology is implemented.
 
 ## 8. Separate oversampling state
 
@@ -576,6 +578,14 @@ Developer `RealPlugin` normally processes only the wet path. Do not add another 
 
 Under DSP bypass, central FFT/oversampling/RealPlugin execution is skipped. The pre-DSP buffer continues through generator timing and wet/dry; actual DSP latency is forced to zero and padded to the fixed maximum.
 
+### Delta, Auto Gain, and Safety Limiter
+
+When `delta-monitor` exists, the generator captures the same dry reference used by Wet/Dry. Delta ON produces aligned wet minus aligned dry and ignores the Wet/Dry amount; Delta OFF uses the normal mix.
+
+Auto Gain is a standard-shell-placed plugin-defined parameter. Its current compensation law is implemented in the reference plugins' `PluginDSP.h`, not in `dsp-generation.scm`; do not assume a universal generator formula.
+
+Safety Limiter is generator-owned optional final protection after Output Gain and before Output Meter. It defaults OFF. CEILING is `-6.0 .. 0.0 dB`, default `-0.5 dB`, step `0.1 dB`; release is fixed internally at 100 ms. The generator normalizes JUCE Limiter's internal threshold/makeup behavior so final sample peak follows CEILING. This is sample-peak limiting, not True Peak.
+
 ## 17. Fixed latency contract
 
 For every generated plugin, `generate-latency-prepare-code` computes:
@@ -628,7 +638,7 @@ After the input meter, hard bypass:
 
 - skips input gain;
 - skips PRE and POST scope taps;
-- skips dry capture, FFT, oversampling, `RealPlugin`, wet/dry, and output gain;
+- skips dry capture, FFT, oversampling, `RealPlugin`, wet/dry/Delta, output gain, and Safety Limiter;
 - preserves the fixed host delay when FFT/oversampling infrastructure requires it;
 - updates output meter from the actual returned buffer;
 - returns.
@@ -646,6 +656,7 @@ DSP bypass occurs inside the normal chain:
 - actual central DSP latency becomes zero and the wet path is padded to maximum;
 - dry latency and linear wet/dry remain active;
 - POST scope, output gain, and output meter remain active.
+- Safety Limiter remains active when declared and enabled.
 
 No `reset()` call is generated merely because DSP bypass changes. When processing resumes, each developer object continues from its retained state.
 
@@ -656,7 +667,7 @@ No `reset()` call is generated merely because DSP bypass changes. When processin
 | input meter | host input before input gain |
 | PRE scope | after input gain, before dry copy and DSP |
 | POST scope | after DSP, fixed latency, and wet/dry; before output gain |
-| output meter | after output gain, on final host-bound signal |
+| output meter | after output gain and optional Safety Limiter, on final host-bound signal |
 
 Consequences:
 
@@ -972,7 +983,9 @@ If an algorithm has factor-dependent physical latency, each instance may report 
 - Implement BPM/subdivision interpretation explicitly in DSP.
 - Treat transport fields as host-dependent and optionals as optional.
 - Never access UI components from the audio thread.
-- Do not edit generated pppbuttavia C++ as generator authority.
+- Treat YAEnhancerR1 as the frozen reference; do not edit it except for a demonstrated bug.
+- Treat YASaturatorR1 and historical pppbuttavia as evidence, not generator authority.
+- Prefer N-channel loops for naturally channel-independent DSP; official Release 1.0 support remains mono/stereo.
 ```
 
 ## 30. Release 1.0 limitations
@@ -1004,4 +1017,4 @@ If an algorithm has factor-dependent physical latency, each instance may report 
 - `YATemplate/Source/PluginProcessor.h/.cpp`: processor lifecycle and transport storage/update.
 - `generator.scm:MakeNewProject`, `synchronize-generator-support-files`: ownership preservation.
 - `tests/hard-bypass-output-meter-test.scm`, `tests/scope-tap-points-test.scm`: observation/bypass ordering.
-- generated `pppbuttavia/Source`: inspection evidence for current emitted consequences only.
+- generated YAEnhancerR1/YASaturatorR1 sources: inspection evidence for current emitted consequences only.

@@ -22,9 +22,9 @@ Authority map:
 - Generator: `generator.scm`, `generator-app/*.scm`.
 - Generic JUCE/template: `YATemplate/Source/*`, `YATemplate/JX11.jucer`.
 - Developer DSP: `YATemplate/Source/PluginDSP.h`.
-- Generated projects, including pppbuttavia: output/evidence, not authority.
+- Frozen YAEnhancerR1, post-freeze YASaturatorR1, and historical generated projects: output/evidence, not generator authority.
 
-Never “fix” a generator defect only in pppbuttavia. Trace wrong output back to its Scheme emitter or authoritative YATemplate source.
+Never “fix” a generator defect only in a generated project. Trace wrong output back to its Scheme emitter or authoritative YATemplate source. Do not modify YAEnhancerR1 after freeze unless a real bug is demonstrated, and do not change Generator architecture for a plugin-local preference.
 
 ## 3. First classify the change
 
@@ -81,7 +81,9 @@ Existing-project regeneration synchronizes only the two Kinetic files. Do not mi
 | FFT precedes oversampling | move FFT into oversampled domain silently |
 | YATemplate owns generic rendering | patch only a generated Kinetic copy |
 | PluginDSP remains developer-owned | overwrite it during regeneration |
-| reference generation explicitly uses topological mode | assume legacy and topology are equivalent |
+| historical logical-grid tests explicitly use topological mode | assume legacy and topological are equivalent |
+| current references explicitly use physical mode | bypass PhysicalLayout/DiscreteGridLayout v2 |
+| existing JX11.jucer is immutable | include incidental Projucer resave churn |
 | explicit UTF-8 expressions stay expressions | quote `cpp-utf8-string` output again |
 | BPM sync remains developer DSP in 1.0 | assume generic tempo-sync semantics exist |
 | `fft-size` uniqueness is only a convention today | assume current validation enforces it |
@@ -151,8 +153,8 @@ Normal Release 1.0 order is fixed:
 ```text
 HOST INPUT -> INPUT METER -> HARD BYPASS -> INPUT GAIN -> PRE SCOPE
 -> DRY CAPTURE -> FFT -> OVERSAMPLING / RealPlugin
--> LATENCY COMPENSATION -> WET/DRY -> POST SCOPE
--> OUTPUT GAIN -> OUTPUT METER -> HOST OUTPUT
+-> LATENCY ALIGNMENT -> WET/DRY or DELTA -> POST SCOPE
+-> OUTPUT GAIN -> SAFETY LIMITER -> OUTPUT METER -> HOST OUTPUT
 ```
 
 FFT runs at host sample rate before factor-specific 1x/2x/4x/8x RealPlugin processing. RealPlugin instances are separate. FFTProcessor instances are separate for every supported FFT size.
@@ -171,8 +173,12 @@ Never allocate, resize containers, lock mutexes, access filesystem/UI/network, s
 
 Parameter families are slider → float, toggle/switch → bool, and bound selector → choice. Sliders and toggle/switch families require nonempty `parameter-id`, `parameter-name`, and `processor-reference`. Selectors may remain UI-only. Roles consume generic cached parameter values; do not duplicate parameter creation.
 
+Official Release 1.0 channels are mono/stereo. Prefer `getNumChannels()`/AudioBlock loops when developer DSP is naturally channel-independent; do not claim 5.1/7.1 or immersive bus topology is implemented.
+
 ## 8. Layout rules
 
+- Current reference path is LogicalTopology -> PhysicalLayout -> DiscreteGridLayout v2 -> JUCE Grid.
+- PhysicalLayout owns physical dimensions; DiscreteGridLayout derives unique boundaries/variable tracks and must reconstruct geometry exactly.
 - Preferred footprints come from `ui-metrics.scm`; do not copy stale dimensions.
 - The normalizer derives solver nodes from registered models and TYPE variants.
 - Horizontal and vertical axes solve independently.
@@ -222,14 +228,9 @@ Add the smallest focused test first:
 
 Then run relevant regressions. Compilation proves C++ integration, not DSL correctness. Never alter a test merely to conceal a real regression. If an expectation is obsolete, prove the canonical source/metric/architecture change first and update only the minimum fixture.
 
-Regenerate only when generated consequences matter. For reference pppbuttavia use:
+Regenerate only when generated consequences matter. Current reference plugins use their declared interface/config/topology with explicit `#:layout-mode 'physical`; YAEnhancerR1 remains frozen unless a demonstrated bug or explicit verification requires regeneration. Generation may invoke Zenity; follow the warning procedure. Use `GUILE_AUTO_COMPILE=0` during source-first validation.
 
-```sh
-GUILE_AUTO_COMPILE=0 guile -L . -l generator.scm -c \
-  '(MakeNewProject "pppbuttavia" NewGeneric-interface #:layout-mode (quote topological) #:topology-declarations pppbuttavia-topology)'
-```
-
-This may invoke Zenity; follow the required warning procedure. Accidental legacy generation can produce materially different geometry. Use `GUILE_AUTO_COMPILE=0` during source-first validation to avoid stale Guile cache observations.
+After initial creation, treat `JX11.jucer` as immutable. Projucer may change its hash during resave; do not include that automatic churn as an intentional update. Never perform Git-mutating operations unless the user explicitly authorizes them.
 
 ## 11. Documentation rules
 
@@ -286,7 +287,8 @@ Inspect current authoritative source and tests; ignore stale README claims.
 Classify the request: TYPE, ROLE, PROPERTY, RESOURCE, DSP, layout,
 renderer, parameter family, or tooling.
 State current behavior and the smallest responsible layer.
-Never patch generated pppbuttavia as the primary fix.
+Never patch a generated project as the primary generator fix.
+Treat YAEnhancerR1 as frozen; YASaturatorR1 is reuse evidence.
 TYPE != ROLE; PROPERTY != RESOURCE.
 Do not invent roles for styling or ordinary effect parameters.
 Validate representable errors in Scheme before C++ generation.
@@ -314,7 +316,9 @@ Do not claim generic BPM-sync semantics exist.
 Do not assume fft-size uniqueness is enforced.
 Add the smallest focused validation/generation/order test first.
 Run relevant regressions; compile only as integration evidence.
-Regenerate reference projects with explicit topological mode.
+Regenerate current references with explicit physical mode.
+Treat existing JX11.jucer as immutable; omit incidental Projucer churn.
+Do not run Git-mutating commands without explicit authorization.
 Inspect generated output as evidence, not authority.
 Update the smallest relevant normative manual when behavior changes.
 Stop and report before changing an invariant or broadening architecture.

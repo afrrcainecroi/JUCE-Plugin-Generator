@@ -27,14 +27,14 @@ When sources disagree, use this order:
 1. Current generator implementation and validation under `generator-app/`, plus the `generator.scm` orchestration entry point.
 2. Current authoritative files under `YATemplate/Source/`, with `PluginDSP.h` specifically developer-owned.
 3. Current regression tests under `tests/` as executable contracts.
-4. Generated output, including pppbuttavia, as evidence of consequences only.
+4. Generated output, including YAEnhancerR1, YASaturatorR1, and historical pppbuttavia, as evidence of consequences only.
 5. README files, historical projects, comments, caches, and old generated artifacts as non-normative material.
 
 ## ADR-001 — TYPE Is Not ROLE
 
 ### Decision
 
-TYPE identifies graphical construction; ROLE selects semantic behavior. `<rotary-slider>` is a TYPE. `input-gain`, `output-gain`, `wet-dry`, `bypass`, `dsp-bypass`, `oversampling`, `input-meter`, `output-meter`, and `scope` are semantic roles. `fft-size` is a role-like DSP selector in the current implementation.
+TYPE identifies graphical construction; ROLE selects semantic behavior. `<rotary-slider>` is a TYPE. `input-gain`, `output-gain`, `wet-dry`, `bypass`, `dsp-bypass`, `oversampling`, `input-meter`, `output-meter`, `scope`, `delta-monitor`, `safety-limiter`, and `safety-limiter-ceiling` are semantic roles. `fft-size` is a role-like DSP selector in the current implementation.
 
 ### Context
 
@@ -457,9 +457,9 @@ Normal processing order is:
 ```text
 HOST INPUT -> INPUT METER -> HARD BYPASS decision -> INPUT GAIN
 -> PRE-DSP SCOPE TAP -> dry capture
--> FFT/developer DSP/oversampling path -> latency compensation
--> wet/dry mix -> POST-DSP SCOPE TAP -> OUTPUT GAIN
--> OUTPUT METER -> HOST OUTPUT
+-> FFT/developer DSP with optional oversampling wrapper -> latency alignment
+-> wet/dry mix or Delta -> POST-DSP SCOPE TAP -> OUTPUT GAIN
+-> optional SAFETY LIMITER -> OUTPUT METER -> HOST OUTPUT
 ```
 
 ### Context
@@ -878,7 +878,7 @@ Do not copy old dimensions into solver code or fixtures as independent truth.
 
 ### Decision
 
-Release/reference topological projects must pass `#:layout-mode 'topological` and topology declarations explicitly.
+Current Release/reference projects must pass `#:layout-mode 'physical` and topology declarations explicitly. The older `'topological` path remains available for logical-grid compatibility/tests.
 
 ### Context
 
@@ -890,7 +890,7 @@ Implicit legacy generation can appear successful without exercising the topologi
 
 ### Consequences
 
-Reference pppbuttavia regeneration uses the explicit topological invocation. Legacy mode may compute a diagnostic shadow but emits legacy geometry.
+Frozen YAEnhancerR1 and post-freeze YASaturatorR1 use explicit physical generation. Historical pppbuttavia/topological tests remain evidence for the earlier path. Legacy mode may compute a diagnostic shadow but emits legacy geometry.
 
 ### Invariants
 
@@ -950,6 +950,70 @@ Do not change a fixture blindly, delete a negative test, or treat a successful C
 
 The files above are themselves the executable evidence for this decision.
 
+## ADR-025 — Standard Shell and Plugin Config Have Separate Authority
+
+### Decision
+
+The per-plugin standard config decides which standard elements exist and how they appear. The standard shell decides their semantic placement and integration.
+
+Every component entry uses `enabled`, `display-name`, `tooltip`, `profile`, `width-scale`, and `height-scale`. `display-name` is presentation metadata and never changes logical `id`, `role`, `parameter-id`, or `processor-reference`. Visible support remains TYPE-dependent; the uniform config contract does not invent missing meter/scope/title properties.
+
+Optional shell controls include Auto Gain, Delta Monitor, Safety Limiter, and CEILING. Delta and limiter processing are generated capabilities. Auto Gain placement is standardized, while its current compensation is consumed in the reference plugins' developer-owned DSP.
+
+### Invariants
+
+Do not modify the standard shell for plugin-local aesthetics. Do not derive semantics or parameter identity from display text. Do not duplicate a standard stage in PluginDSP.
+
+### Authoritative implementation
+
+`generator-app/standard-plugin-shell.scm`; `generator-app/dsp-generation.scm`; `plugins/YAEnhancerR1.scm`; `plugins/YASaturatorR1.scm`.
+
+## ADR-026 — Physical Layout Is the Current Reference Path
+
+### Decision
+
+The current Release 1.0 reference path is:
+
+```text
+DSL components -> LogicalTopology -> topological normalization
+-> PhysicalLayout -> DiscreteGridLayout v2
+-> generation adapter -> JUCE Grid runtime
+```
+
+LogicalTopology owns relations, stacks, areas, alignments, and logical sizing. PhysicalLayout resolves exact physical geometry using screen dimensions, base unit, UI scale/size, UI metrics, and policy. DiscreteGridLayout v2 derives unique physical boundaries, variable tracks, and verifies exact reconstruction. Solvers remain in Scheme; generated C++ receives resolved grid data.
+
+Legacy and earlier logical-grid topological modes remain compatibility paths, not evidence that the physical reference path was exercised.
+
+### Authoritative implementation
+
+`generator-app/topological-normalizer.scm`; `physical-layout.scm`; `discrete-grid-layout.scm`; `generation-orchestration.scm`; `layout.scm`.
+
+## ADR-027 — Release References, Channel Policy, and Project Files
+
+### Decision
+
+`YAEnhancerR1` is the frozen Release 1.0 architectural reference and changes after freeze only for demonstrated bugs. `YASaturatorR1` is the first post-freeze reuse proof and does not replace it. pppbuttavia is historical/example material.
+
+Release 1.0 officially supports mono/stereo. Naturally channel-independent developer DSP should iterate `AudioBlock::getNumChannels()`; 5.1, 7.1, immersive bus topology, semantic channel roles, and multichannel observation/routing are future work.
+
+After initial creation, `JX11.jucer` is treated as immutable. A Projucer resave may change its hash, but incidental resave churn is not an intentional plugin update. `PluginDSP.h` remains developer-owned.
+
+### Forbidden shortcuts
+
+Do not patch a frozen reference for unrelated development, hard-code stereo unnecessarily, claim multichannel buses as implemented, or include automatic JUCER churn as a normal intentional change.
+
+## ADR-028 — Safety Limiter Provides a Sample-Peak Ceiling
+
+### Decision
+
+Safety Limiter is an optional generated capability, OFF by default. CEILING is `-6.0 .. 0.0 dB`, default `-0.5 dB`, step `0.1 dB`; release is internal and fixed at 100 ms. It is sample-peak protection, not True Peak.
+
+JUCE `Limiter::setThreshold` is not treated as the final ceiling control. Generated processing normalizes the limiter domain and scales its output so the final sample peak follows CEILING. The limiter is after Output Gain and before Output Meter; Hard Bypass returns before it, while DSP Bypass does not bypass it.
+
+### Authoritative implementation
+
+`generator-app/dsp-generation.scm`; `tests/safety-limiter-generation-test.scm`; `tests/safety-limiter-dsp-numeric-test.cpp`.
+
 ## Release 1.0 invariants
 
 Before changing this repository, verify all of the following:
@@ -972,7 +1036,7 @@ Before changing this repository, verify all of the following:
 - FFT runs at host sample rate before oversampled time-domain DSP.
 - YATemplate/KineticLookAndFeel owns generic visual rendering; it contains no component-ID/role semantics.
 - `PluginDSP.h` remains developer-owned.
-- Reference topological generation passes `#:layout-mode 'topological` explicitly.
+- Current reference generation passes `#:layout-mode 'physical` explicitly.
 - Architectural changes include corresponding tests and ADR updates.
 
 ## Extension checklist

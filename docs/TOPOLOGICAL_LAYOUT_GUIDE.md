@@ -10,23 +10,19 @@ Component syntax belongs in `DSL_REFERENCE.md`; architecture invariants belong i
 
 Legacy layout requires authors to assign every component a row, column, and spans. Topological layout instead states durable relationships: a meter is next to a gain, controls form a strip, a scope is centred in a screen area, or several nodes share an edge.
 
-The generator obtains sizes from canonical UI metrics, solves relationships in Scheme, preserves exact rational geometry, refines only when needed, and supplies integer geometry to the existing JUCE Grid emitter. It never infers topology from component roles or names.
+The generator obtains size contracts from canonical UI metrics, normalizes relationships in Scheme, resolves physical rectangles, converts their unique boundaries to variable grid tracks, and supplies resolved geometry to the JUCE Grid emitter. It never infers topology from component roles or names.
 
 ## 3. Generation pipeline
 
-The implemented pipeline is:
+The current Release 1.0 reference pipeline is:
 
 ```text
-registered component alist models
- -> normalize-topological-model-layout
- -> nodes + alignments + groups + node-area placements
- -> lt:solve validation
- -> independent horizontal and vertical difference-constraint solves
- -> exact rational resolved geometry
- -> refine-topological-grid
- -> integer grid and component layout models
- -> generate-grid-code
- -> existing generated JUCE Grid layout
+DSL components -> registered component models -> LogicalTopology
+-> normalize-topological-model-layout
+-> PhysicalLayout (screen/base-unit/UI-scale/UI-metrics/policy)
+-> exact physical component rectangles
+-> DiscreteGridLayout v2 unique physical boundaries and variable tracks
+-> generation adapter -> generate-grid-code -> JUCE Grid runtime
 ```
 
 Exact boundaries:
@@ -35,17 +31,16 @@ Exact boundaries:
    - `normalize-topological-model` maps a registered component model to an `lt:node`.
    - `normalize-topological-model-layout` validates declarations, attaches `lt:constrain` relations, and builds normalized IR.
    - `solve-normalized-topological-layout` invokes `lt:solve` with the registered grid dimensions.
-2. `generator-app/topological-layout.scm`
-   - `lt:solve` validates IR, solves hard constraints, resolves areas, optimizes cohesion wishes, and reports nodes and group bounding boxes.
-3. `generator-app/generation-orchestration.scm`
-   - `build-topological-shadow` normalizes, solves, and compares legacy geometry.
-   - `prepare-generation-layout` selects legacy or topological output.
-   - `refine-topological-grid` makes rational geometry discrete.
-   - `generate-selected-grid-code` calls the established emitter.
-4. `generator-app/layout.scm`
+2. `generator-app/physical-layout.scm`
+   - resolves physical size contracts, domains, axes, stacks, and final exact rectangles.
+3. `generator-app/discrete-grid-layout.scm`
+   - derives sorted unique boundaries and variable tracks and verifies exact reconstruction.
+4. `generator-app/generation-orchestration.scm`
+   - selects physical mode and adapts DiscreteGridLayout v2 to the emitter contract.
+5. `generator-app/layout.scm`
    - `generate-grid-code` emits the component map and grid/component JSON consumed by generated C++.
 
-The solver runs entirely in Scheme. Generated C++ receives only resolved `row`, `col`, `rowSpan`, and `colSpan`.
+All solving runs in Scheme. Generated C++ receives resolved rows, columns, spans, and optional variable track sizes. The older `'topological` mode still uses `lt:solve` plus exact rational refinement; it is a compatibility path, not the current physical reference path.
 
 ## 4. Logical coordinates and UI metrics
 
@@ -333,6 +328,22 @@ Cross alignment acts perpendicularly to group layout:
 
 All are hard alignments. `baseline` and CSS-style values are not supported.
 
+### Stacks (current shell composition)
+
+`lt:stack` is a rigid geometric entity used by the current standard shell and plugin topologies:
+
+```scheme
+(lt:stack 'plugin-dsp
+  #:layout 'horizontal
+  #:gap 4
+  #:cross-align 'center
+  'drive 'shape)
+```
+
+Unlike a legacy `lt:group`, a stack has its own ID, exact size, and origin. Members may be node/stack IDs or nested inline `lt:stack` declarations; normalization lifts nested declarations and retains their IDs. Primary-axis children are placed sequentially with the exact gap and cross-axis children use start/center/end alignment. Cyclic or unresolved stack dependencies are rejected.
+
+PhysicalLayout treats top-level stacks as roots and recursively expands their solved rectangles. Use stacks for the hierarchical standard-shell structures; the flat-group limitation below applies to `lt:group`, not to `lt:stack`.
+
 ## 10. Cohesion and soft wishes
 
 Without `#:cohesion`, group spacing is hard and exact. With cohesion, each consecutive primary-axis spacing becomes a soft wish.
@@ -578,7 +589,15 @@ rotary col = 3/2
 
 The result is exact `3/2`. Tests also prove `5/2`, `7/2`, and hierarchical thirds such as `49/3`. Premature rounding would break alignment and proportional placement.
 
-## 19. Refinement
+## 19. PhysicalLayout and DiscreteGridLayout v2
+
+In current `'physical` mode, `pl:solve` consumes normalized LogicalTopology, exact screen dimensions, standard physical policy, base unit (12 px by default), and UI scale/size preferences. It resolves physical domains and size contracts, solves root X/Y placement, expands stacks recursively, validates bounds/overlaps, and produces exact rectangles.
+
+`dgl:discretize` does not solve topology again and does not consult UI metrics. For each axis it collects screen edges plus every component start/end, sorts and deduplicates those exact boundaries, and makes each adjacent difference a variable track. A rectangle's row/column is its boundary index plus one and its span is the distance between boundary indices. Local and global checks prove reconstruction of every edge and the full screen.
+
+This is DiscreteGridLayout version 2. It deliberately avoids a uniform minimum quantum and preserves physical proportions compactly.
+
+## 20. Earlier logical-grid refinement
 
 `axis-refinement-factor` takes the least common multiple of coordinate denominators independently:
 
@@ -603,35 +622,35 @@ dy = 1
 
 Its 144×15 logical grid becomes 288×15. X and Y differ because their rational denominators differ. One-based origin remains 1, and `refine-entry` requires exact integer output.
 
-## 20. Final JUCE Grid
+## 21. Final JUCE Grid
 
-`discrete-layout-components` combines integer geometry with each generated C++ variable and retained margins. `generate-grid-code` receives the refined `rows`, `cols`, `show-grid`, and integer component records.
+In physical mode, `adapt-discrete-grid-layout` combines each registered C++ variable with the discrete rectangle and supplies `row-tracks`/`col-tracks` to `generate-grid-code`. Earlier topological mode uses `discrete-layout-components` and rational refinement instead.
 
 The resulting component map and JSON use the established generated JUCE Grid path. Topology changes where geometry comes from; it does not generate a C++ solver or a new runtime layout architecture.
 
-## 21. Legacy versus topological mode
+## 22. Layout modes
 
-Topological generation must be explicit:
+Current reference generation must request physical mode explicitly:
 
 ```scheme
 (MakeNewProject
   "plugin"
   Interface
-  #:layout-mode 'topological
+  #:layout-mode 'physical
   #:topology-declarations topology)
 ```
 
-Metrics determine spans and topology determines positions. Legacy spans are ignored, though mismatches are reported in normalizer warnings. Legacy row/col values remain hard anchors.
+Metrics/profile/scales determine physical size contracts and topology determines semantic placement. Legacy spans do not size the physical result.
 
-Legacy is the current default:
+Legacy remains the compatibility default:
 
 ```scheme
 (MakeNewProject "plugin" Interface)
 ```
 
-Legacy emission uses authored row/col/spans. It also runs `run-generation-topological-shadow` diagnostically, but shadow results never feed the legacy emitter. `tests/topological-shadow-integration-test.scm` verifies byte-identical legacy output.
+Legacy emission uses authored row/col/spans. The separate `'topological` mode runs the earlier logical solver and rational refinement. `'physical` runs PhysicalLayout plus DiscreteGridLayout v2. Legacy also runs a diagnostic shadow, but shadow results never feed its emitter.
 
-Passing topology declarations does not select topological emission. Accidentally omitting `#:layout-mode 'topological` can materially change a reference interface.
+Passing topology declarations does not select physical emission. Accidentally omitting `#:layout-mode 'physical` can materially change a reference interface.
 
 ## 22. Practical patterns
 
@@ -741,24 +760,25 @@ For generation:
   #:topology-declarations example-topology)
 ```
 
-## 24. pppbuttavia case study
+## 24. Release 1.0 reference plugins
 
-Current `pppbuttavia-topology` in `generator.scm` expresses:
+`YAEnhancerR1` is the frozen architectural reference. Its plugin topology is composed with `standard-plugin-topology`, and physical policy places these semantic structures:
 
 ```text
 top:                 plugin title
 left audio strip:    input meter -> input gain, zero gap
 centre/top:           18×10 preferred scope
 right audio strip:   output gain -> output meter, zero gap
-lower strip:         wet/dry -> oversampling -> FFT size
-                     -> hard bypass -> DSP bypass, gap 2
+plugin DSP:           enhancer-specific controls
+lower controls:       wet/dry, oversampling, auto gain, Delta,
+                     limiter/ceiling, DSP bypass, hard bypass
 top-right/top:        theme label above selector, zero gap
 bottom corners:       site link and copyright, aligned at bottom
 ```
 
-All groups are flat. Generated coordinates are evidence of a solve, not authority; declarations, metrics, normalizer, and solver are authoritative.
+The shell supplies topology and placement for standard capabilities; plugin config selects them and the plugin topology describes only the effect-specific control structure. `YASaturatorR1` reuses that architecture after the freeze with only DRIVE/SHAPE in its plugin-DSP stack. This is the current reuse proof.
 
-The independently placed audio, scope, controls, theme, and footer groups have no automatic mutual exclusion. Their actual dimensions and explicit constraints determine whether they overlap.
+pppbuttavia remains a useful historical/example topology but is not the current primary reference. Generated coordinates are evidence; config, topology, metrics, PhysicalLayout, and DiscreteGridLayout are authoritative.
 
 ## 25. Debugging topology
 
@@ -832,7 +852,7 @@ There is no general collision error. Independent overlaps are accepted unless ex
 - Do not hard-code final integer row/col/spans in topological mode.
 - Preserve exact rationals until refinement.
 - Do not weaken contradiction detection.
-- Keep #:layout-mode 'topological explicit for reference generation.
+- Keep #:layout-mode 'physical explicit for current reference generation.
 ```
 
 ## 28. Release 1.0 limitations
@@ -844,7 +864,7 @@ There is no general collision error. Independent overlaps are accepted unless ex
 - Two-axis rectangular topology only.
 - Soft cohesion is limited to the current weighted finite gap/order preference model.
 - Cohesion can permit overlap/reversal when hard constraints force it.
-- Legacy and topological modes coexist; legacy is default.
+- Legacy, earlier topological, and current physical modes coexist; legacy is the compatibility default.
 - Rational refinement may enlarge X and Y grid dimensions independently.
 - Preferred profiles are selected by the normalizer; no responsive profile selection.
 - No semantic layout inference from ROLE or component names.
@@ -854,6 +874,9 @@ There is no general collision error. Independent overlaps are accepted unless ex
 
 - `generator-app/topological-layout.scm`: IR, equations, groups, areas, hard solve, cohesion, bounding boxes.
 - `generator-app/topological-normalizer.scm`: component-model mapping and declaration adaptation.
+- `generator-app/physical-layout.scm`: current exact physical size/domain/placement solver.
+- `generator-app/discrete-grid-layout.scm`: v2 unique-boundary variable-track conversion and reconstruction checks.
+- `generator-app/generation-orchestration.scm`: physical selection and grid adapter.
 - `generator-app/generation-orchestration.scm`: shadow, mode selection, refinement, selected output.
 - `generator-app/ui-metrics.scm`: footprints and variants.
 - `generator-app/layout.scm`: grid model and existing emitter.
@@ -861,6 +884,7 @@ There is no general collision error. Independent overlaps are accepted unless ex
 - `tests/topological-normalizer-test.scm`: high-level adapter behavior.
 - `tests/topological-generated-layout-test.scm`: exact refinement and emitted integers.
 - `tests/topological-shadow-integration-test.scm`: diagnostic shadow isolation.
-- `generator.scm`: generation mode and `pppbuttavia-topology`.
+- `generator-app/standard-plugin-shell.scm`: reference shell topology and physical policy.
+- `plugins/YAEnhancerR1.scm`, `plugins/YASaturatorR1.scm`: current reference/reuse declarations.
 
 For intentional post-1.0 changes, update implementation, focused tests, and the applicable architecture decision together.

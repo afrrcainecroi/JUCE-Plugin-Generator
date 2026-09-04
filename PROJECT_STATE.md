@@ -1,404 +1,83 @@
-# JUCE Plugin Generator - Project State
+# JUCE Plugin Generator — Current Project State
 
-## Goal
+This file is the authoritative technical snapshot of the current Release 1.0 working tree. Future work belongs in `NEXT.md`.
 
-Generatore di plugin JUCE scritto in Guile/Scheme.
+## Release identity and references
 
-La specifica Scheme descrive:
-- componenti GUI;
-- parametri DAW/APVTS;
-- semantica DSP tramite role;
-- layout;
-- proprietà grafiche KineticLookAndFeel.
-
-Il generatore produce il progetto C++ JUCE completo.
-
-## Working method
-
-Procedere incrementalmente.
-
-Una modifica per volta:
-1. definire il comportamento;
-2. modificare il generatore;
-3. rigenerare il plugin;
-4. compilare;
-5. provare;
-6. approvare;
-7. commit Git.
-
-Non inserire manualmente nel plugin generato codice che dovrebbe appartenere al generatore.
-
-## Main files
-
-Main Scheme generator:
-
-    generator-app/code-generator.scm
-
-Main generated JUCE files include:
-
-    Source/PluginProcessor.cpp
-    Source/PluginProcessor.h
-    Source/PluginEditor.cpp
-    Source/PluginEditor.h
-    Source/KineticLookAndFeel.cpp
-    Source/KineticLookAndFeel.h
+- Release tag: `v1.0.0`.
+- Primary architectural reference: `YAEnhancerR1`, frozen; post-freeze changes require a demonstrated bug.
+- Reuse proof: `YASaturatorR1`, the first new plugin after the freeze, created without Generator changes and limited to DRIVE, SHAPE, and developer-owned waveshaping.
+- `pppbuttavia` is historical/example material, not the current primary reference.
 
-## Architecture
+## Implemented architecture
 
-    Scheme specification
-            |
-            v
-    component/model registration
-            |
-            v
-    intermediate model
-            |
-            +---- GUI emitters
-            +---- APVTS emitters
-            +---- DSP emitters
-            +---- layout information
-            |
-            v
-    generated JUCE C++
+```text
+Scheme/GOOPS DSL -> validated registered component models
+-> APVTS and standard-shell generation
+-> LogicalTopology and topological normalization -> PhysicalLayout
+-> DiscreteGridLayout v2 -> generation adapter -> JUCE Grid/runtime project
+```
 
-Future layout architecture:
+TYPE, ROLE, PROPERTY, and RESOURCE are distinct. Graphical TYPE does not imply semantic ROLE. Effect-specific controls normally use ordinary APVTS bindings and are interpreted by developer-owned `PluginDSP.h`. Parameter generation supports float sliders, bool toggle/switch controls, and choice selectors; binding validation occurs before C++ generation.
 
-    semantic layout constraints
-            |
-            v
-    layout solver
-            |
-            v
-    row/col/rowSpan/colSpan
-            |
-            v
-    C++/JSON emitter
+## Standard shell and configuration
 
-For now layout solver is postponed.
-Rows, columns, spans and margins are explicitly specified.
+Every per-plugin component config entry follows:
 
-## Component roles
+```scheme
+(component-id
+ (enabled . #t)
+ (display-name . "...")
+ (tooltip . "...")
+ (profile . #f)
+ (width-scale . 1)
+ (height-scale . 1))
+```
 
-Semantic role is independent from graphical component type.
+Plugin config decides what exists and how it appears. The shell decides semantic placement and standard integration. `display-name` is visual metadata and does not change `id`, `role`, `parameter-id`, or `processor-reference`.
 
-Currently defined roles:
+The contract is uniform, but its visible effect is TYPE-dependent: meter and scope do not expose title/tooltip properties in the current base DSL, and a selector has no title field. Unsupported presentation fields are not silently promoted into logical identity.
 
-    input-gain
-    output-gain
-    wet-dry
-    bypass
-    dsp-bypass
-    oversampling
-    input-meter
-    output-meter
-    scope
+Implemented optional standard capabilities are input/output gain and meters; PRE/POST scope; Wet/Dry; oversampling 1x/2x/4x/8x; Auto Gain control/placement, with compensation implemented in reference-plugin `PluginDSP.h`; Delta Monitor; DSP Bypass; Hard Bypass; Safety Limiter and CEILING; and theme/title/footer/link infrastructure.
 
-Role uniqueness must be validated for roles that may occur only once.
+## Current audio pipeline
 
-Lookup:
+```text
+HOST INPUT -> INPUT METER -> HARD BYPASS GUARD -> INPUT GAIN
+-> PRE-DSP SCOPE -> DRY REFERENCE CAPTURE
+-> FFT / DEVELOPER DSP with optional standard oversampling wrapper
+-> LATENCY ALIGNMENT -> WET/DRY or DELTA -> POST-DSP SCOPE
+-> OUTPUT GAIN -> SAFETY LIMITER -> OUTPUT METER -> HOST OUTPUT
+```
 
-    find-component-by-role
+Stages are conditional. FFT runs at host sample rate before oversampling. Four separately prepared `RealPlugin` instances cover 1x, 2x, 4x, and 8x; FFT processors are separate per supported size.
 
-## Component hierarchy
-
-    <component>
-    ├── <label>
-    │   ├── <header>
-    │   ├── <footer>
-    │   ├── <link>
-    │   └── <palette-label>
-    ├── <selector>
-    │   └── <palette-selector>
-    ├── <button>
-    │   ├── <text-button>
-    │   └── <toggle-button>
-    │       ├── <normal-toggle-button>
-    │       └── <switch>
-    │           └── <bypass-switch>
-    ├── <slider>
-    │   ├── <rotary-slider>
-    │   └── <linear-slider>
-    ├── <meter>
-    └── <scope>
+DSP Bypass skips central FFT/developer/oversampling execution, not the surrounding standard pipeline. Hard Bypass uses the current early-return branch, skips the normal effect chain, preserves fixed timing when required, and updates I/O meters according to current implementation.
 
-Base <component> contains role.
+Delta produces aligned wet minus aligned dry and replaces the normal Wet/Dry result while active. Auto Gain is not a generator formula: the shell places its plugin-defined control and the reference plugins consume it in developer DSP.
 
-component->model base method emits common properties.
-Specialized methods extend it using next-method.
+## Safety Limiter
 
-## Parameterized component families
+Safety Limiter is optional and OFF by default. CEILING has range `-6.0 .. 0.0 dB`, default `-0.5 dB`, and step `0.1 dB`; release is fixed internally at 100 ms. It is a host-rate sample-peak limiter, not a True Peak limiter. Because JUCE's `Limiter::setThreshold` is not itself a final-output ceiling control, generated processing normalizes the limiter domain and scales the result so the final sample peak follows CEILING.
 
-Do NOT special-case only bypass-switch.
+## Layout state
 
-Boolean/button parameter family:
+LogicalTopology carries relations, stacks, area placement, alignment, profile, and logical scaling. PhysicalLayout resolves exact rectangles using screen dimensions, base unit, UI scale/size, UI metrics, and standard-shell domains. DiscreteGridLayout v2 derives sorted unique physical boundaries, emits variable tracks, and verifies exact reconstruction. Legacy and earlier logical-grid topological modes remain compatibility paths.
 
-    toggle-button
-    normal-toggle-button
-    switch
-    bypass-switch
+## Ownership and regeneration
 
-Slider parameter family:
+- Scheme and marked generated sections are Generator-owned.
+- Generic runtime/rendering belongs to YATemplate.
+- `PluginDSP.h` is developer-owned.
+- Generated projects are evidence, not source authority.
+- Realtime process functions allocate no memory and take no locks.
 
-    rotary-slider
-    linear-slider
+After initial project creation, `JX11.jucer` is considered immutable. A normal Projucer resave may change its hash, but that automatic churn is not an intentional plugin modification and should not normally be included.
 
-Helpers:
+## Channel policy and limits
 
-    button-parameter-type?
-    slider-parameter-type?
-    parameter-component-type?
+Release 1.0 officially supports mono and stereo. Developer DSP should avoid hard-coded stereo when naturally channel-independent and iterate `AudioBlock::getNumChannels()`.
 
-These are used by:
+5.1, 7.1, semantic channel roles, multichannel meters/scope/routing, immersive layouts, generic modulation, and arbitrary routing are roadmap work. The repository records Linux Standalone/VST3 evidence but no Windows/macOS certification or True Peak behavior.
 
-    model->attachment-declaration
-    model->attachment-code
-    model->parameter-code
-    model->dparams-code
-    model->getparams-code
-    model->valueparams-code
-    model->destroy-code
-
-## DSP semantics
-
-Hard bypass:
-
-    role = bypass
-
-OFF:
-    normal processing
-
-ON:
-    processBlock returns immediately.
-    Input buffer remains untouched.
-    Entire DSP/infrastructure pipeline is skipped.
-
-DSP bypass:
-
-    role = dsp-bypass
-
-OFF:
-    myplugin->processAudio(buffer, 1) executes
-
-ON:
-    only central DSP processing is bypassed.
-    Input/output gain, meters, scope etc. may continue.
-
-Current desired pipeline:
-
-    HARD BYPASS
-        |
-    INPUT GAIN
-        |
-    INPUT METER
-        |
-    DRY COPY             [future wet/dry]
-        |
-    DSP BYPASS
-        |
-    OVERSAMPLING         [future]
-        |
-    myplugin->processAudio()
-        |
-    DOWNSAMPLING         [future]
-        |
-    WET/DRY MIX          [future]
-        |
-    OUTPUT GAIN
-        |
-    OUTPUT METER
-        |
-    SCOPE
-
-Gain parameters are dB.
-
-JUCE buffer.applyGain() must receive linear gain:
-
-    juce::Decibels::decibelsToGain(value_inputGain)
-    juce::Decibels::decibelsToGain(value_outputGain)
-
-## DSP generation
-
-Generated processor block:
-
-    /// PROCESS START
-
-    generated code
-
-    /// PROCESS END
-
-generate-process-code currently composes:
-
-    generate-process-bypass
-    generate-process-input-gain
-    generate-process-input-meter
-    generate-process-dsp
-    generate-process-output-gain
-    generate-process-output-meter
-    generate-process-scope
-
-generate-process-dsp checks role dsp-bypass.
-
-If dsp-bypass does not exist:
-
-    myplugin->processAudio(buffer, 1);
-
-If it exists:
-
-    if (value_DSPBypass < 0.5f)
-        myplugin->processAudio(buffer, 1);
-
-Next DSP additions:
-
-1. wet-dry
-2. oversampling
-
-These will require declarations/setup in addition to PROCESS code.
-Do not allocate audio buffers dynamically in processBlock.
-
-## GUI bypass feedback
-
-Generated editor block:
-
-    /// PAINT_OVER_CHILDREN START
-
-    generated code
-
-    /// PAINT_OVER_CHILDREN END
-
-Hard bypass:
-- dark overlay;
-- large "BYPASSED";
-- other children disabled.
-
-DSP bypass:
-- plugin remains usable;
-- separate visible "DSP BYPASSED" feedback;
-- must not behave like hard bypass.
-
-## Slider properties
-
-The Scheme model already defines properties including:
-
-    title
-    value-type
-    suffix
-    show-value
-    show-ticks
-    show-labels
-    tick-count
-    tick-mode
-    tick-labels
-
-These MUST remain semantic properties of the component.
-Do not replace them by hardcoded behaviour in the generator.
-
-slider-kinetic-properties->cpp already emits:
-
-    title
-    valueType
-    suffix
-    showValue
-    showTicks
-    showLabels
-    tickCount
-    tickMode
-    tickLabels
-
-KineticLookAndFeel must interpret these properties.
-
-formatMetric(value, type) already formats:
-- gain
-- freq/hz
-- generic values
-
-The long raw numeric values previously visible beside sliders came
-from JUCE Slider's standard TextBox, not formatMetric.
-
-The generated constructor should therefore use:
-
-    slider.setTextBoxStyle(
-        juce::Slider::NoTextBox,
-        false,
-        0,
-        0);
-
-because KineticLookAndFeel draws the formatted value itself.
-
-IMPORTANT:
-Properties still have to be managed correctly.
-Do not remove or bypass valueType/suffix/showValue/etc.
-They define how KineticLookAndFeel renders a component.
-
-## Layout
-
-Automatic semantic layout solver already exists as prototype but
-integration is postponed.
-
-For now use explicit:
-
-    row
-    col
-    row-span
-    col-span
-    margin-tb
-    margin-lr
-
-Current JSON grid key is:
-
-    cols
-
-NOT:
-
-    columns
-
-## Generated block markers
-
-Canonical form:
-
-    /// INTERFACE START
-    /// INTERFACE END
-
-    /// VALUEPARAMS START
-    /// VALUEPARAMS END
-
-    /// PROCESS START
-    /// PROCESS END
-
-    /// PAINT_OVER_CHILDREN START
-    /// PAINT_OVER_CHILDREN END
-
-No '*' character belongs in emitted markers.
-
-## UUID / VST3 CID
-
-Plugin UUID/CID must remain stable when regenerating the same project.
-
-A new UUID is generated only when creating a genuinely new project.
-
-Deleting and regenerating a project must NOT silently assign a new
-plugin identity if it represents the same plugin.
-
-## Current work
-
-Current milestone:
-
-    generated DSP pipeline
-
-Already addressed:
-- hard bypass
-- input gain
-- input meter
-- DSP bypass
-- output gain
-- output meter
-- scope
-- generic APVTS support for switches/buttons/sliders
-
-Immediate tasks:
-
-1. verify NoTextBox generation for all sliders
-2. finish graphical feedback for bypass / dsp-bypass
-3. verify slider properties remain correctly interpreted
-4. generate wet-dry DSP
-5. generate oversampling DSP
-6. later integrate automatic layout solver
+Roadmap items are architectural directions and experimental plugin concepts, not Release 1.0 capabilities.

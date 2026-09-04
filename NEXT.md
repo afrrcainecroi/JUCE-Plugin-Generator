@@ -1,48 +1,56 @@
-# Current task
+# JUCE Plugin Generator — Roadmap
 
-## Current milestone
+This file contains future architectural directions and experimental plugin concepts. It is separate from the implemented Release 1.0 state in `PROJECT_STATE.md` and `docs/RELEASE_1.0.md`.
 
-Generated DSP pipeline and semantic GUI roles.
+> Roadmap items are architectural directions and experimental plugin concepts, not Release 1.0 capabilities.
 
-## Completed
+## 1. Modulation capability
 
-- component semantic roles
-- input-gain
-- output-gain
-- input-meter
-- output-meter
-- hard bypass
-- dsp-bypass
-- scope
-- generalized APVTS generation for slider/toggle parameter families
-- PROCESS generated block
-- PAINT_OVER_CHILDREN generated block
-- stable VST3 UUID/CID handling
-- grid key normalized to `cols`
-- slider properties emitted through `slider-kinetic-properties->cpp`
-- `KineticLookAndFeel::formatMetric()` verified
+- free-rate LFO;
+- BPM synchronisation;
+- waveform selector;
+- modulation depth;
+- modulation target/routing;
+- optional transport/PPQ phase lock.
 
-## Immediate work
+This requires explicit parameter-modulation, smoothing, transport-fallback, routing, realtime-resource, and UI decisions. None is currently generic Generator behavior.
 
-1. Verify generated `Slider::NoTextBox` for rotary and linear sliders.
-2. Verify the displayed values are now produced only by `KineticLookAndFeel`.
-3. Complete/fix hard-bypass graphical overlay so `BYPASSED` is fully visible.
-4. Complete DSP-bypass graphical feedback (`DSP BYPASSED`).
-5. Verify all slider properties are correctly interpreted:
-   - valueType
-   - suffix
-   - showValue
-   - showTicks
-   - showLabels
-   - tickCount
-   - tickMode
-   - tickLabels
-6. Generate wet/dry DSP.
-7. Generate oversampling DSP.
+## 2. Channel Layout / Bus Topology
 
-## Deferred
+- 5.1 and 7.1 layouts;
+- possible immersive layouts;
+- semantic channel roles;
+- multichannel meters and scope;
+- multichannel routing and validation.
 
-- automatic semantic layout solver integration
-- meter graphical refinement
-- initial palette selector synchronization
-- further graphical refinements
+N-channel developer-DSP style is a current coding policy, not implemented multichannel bus negotiation.
+
+## 3. YAModDelayR1
+
+- fractional delay;
+- sub-ms to multi-second range;
+- feedback;
+- free modulation and BPM synchronisation;
+- waveform selection.
+
+## 4. YAPolyShaperR1
+
+- configurable polynomial order;
+- coefficients;
+- even/odd harmonic design;
+- normalization and protection.
+
+## 5. YATranscendentalR1
+
+`tanh`, `atan`, `sin`, `exp`, and `log` families for saturation and wavefolding experiments.
+
+## 6. YADifferentialR1
+
+- first discrete difference;
+- second discrete difference;
+- direct processing;
+- possible transient/modulation-source use.
+
+## Roadmap discipline
+
+Before promotion to a capability, define TYPE/ROLE/PROPERTY/RESOURCE boundaries, signal order, bypass/latency semantics, realtime ownership, validation, tests, and compatibility. Do not modify the stable shell or layout architecture merely to prototype a plugin-local idea.

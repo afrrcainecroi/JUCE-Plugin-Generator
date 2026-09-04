@@ -101,7 +101,8 @@ Release 1.0 generic semantic roles are:
 
 ```text
 input-gain output-gain wet-dry bypass dsp-bypass oversampling
-input-meter output-meter scope fft-size
+input-meter output-meter scope delta-monitor safety-limiter
+safety-limiter-ceiling fft-size
 ```
 
 Most are global/unique. `fft-size` is consumed semantically but is not currently in the same uniqueness-enforced list; authors should still declare one at most.
@@ -138,6 +139,22 @@ Selector UI/default indices are one-based: item 1 is the first choice. Bound sel
 
 ## 8. Standard plugin infrastructure
 
+Normal plugins start from `standard-plugin-interface` and configure each standard element with:
+
+```scheme
+(component-id
+ (enabled . #t)
+ (display-name . "...")
+ (tooltip . "...")
+ (profile . #f)
+ (width-scale . 1)
+ (height-scale . 1))
+```
+
+Plugin config decides **what exists and how it appears**. The shell decides **where it belongs semantically and how it is integrated**. `display-name` never changes `id`, `role`, `parameter-id`, or `processor-reference`.
+
+Visible support is TYPE-dependent. Labels/sliders/buttons expose tooltip, selectors expose tooltip/enablement but no title, and meter/scope do not currently expose display-title or tooltip slots. Profile and width/height scales participate in layout for every component.
+
 A rich general effect may contain:
 
 - plugin title;
@@ -149,6 +166,7 @@ A rich general effect may contain:
 - oversampling when nonlinear DSP benefits;
 - FFT size only for spectral processing;
 - hard bypass and DSP bypass;
+- Auto Gain, Delta Monitor, and optional Safety Limiter/CEILING;
 - site link and copyright footer.
 
 This is a menu, not a requirement. A distortion commonly benefits from oversampling but may need no FFT. A spectral processor needs FFT. A utility gain plugin needs neither. Reverb often benefits from wet/dry but does not automatically require spectral processing.
@@ -170,7 +188,7 @@ Raising Input Gain therefore leaves the input meter unchanged, raises the PRE/PO
 Output Gain uses role `output-gain`. The output meter follows it:
 
 ```text
-POST SCOPE -> OUTPUT GAIN -> OUTPUT METER -> HOST OUTPUT
+POST SCOPE -> OUTPUT GAIN -> optional SAFETY LIMITER -> OUTPUT METER -> HOST OUTPUT
 ```
 
 Raising Output Gain leaves both scope traces unchanged and raises the output meter. A coherent visual flow places `input-meter -> input-gain` on the left and `output-gain -> output-meter` on the right.
@@ -222,9 +240,9 @@ Dual observation is useful for saturation, compression, filtering, transient sha
 
 Hard bypass and DSP bypass answer different questions.
 
-**Hard bypass** skips the processing chain, preserves the fixed timing contract, keeps plugin I/O meters meaningful, freezes scope, and activates the global BYPASSED visual feedback. Use it to compare the plugin with the untouched path.
+**Hard bypass** takes the early-return path, skips the normal processing chain including output gain/limiter, preserves the fixed timing contract, keeps plugin I/O meters meaningful, freezes scope, and activates the global BYPASSED visual feedback.
 
-**DSP bypass** skips the central FFT/oversampling/RealPlugin work while retaining Input Gain, wet/dry/latency infrastructure, PRE/POST observation, Output Gain, meters, and a usable GUI. Use it to compare the algorithm while retaining generator-managed surroundings.
+**DSP bypass** skips the central FFT/oversampling/RealPlugin work while retaining Input Gain, wet/dry or Delta, latency infrastructure, PRE/POST observation, Output Gain, optional Safety Limiter, meters, and a usable GUI.
 
 Both are normally single toggle/switch nodes with their own text and complete bool binding tuple. Do not present them as aliases.
 
@@ -236,7 +254,15 @@ The generator captures and latency-aligns dry/wet paths and applies the current 
 
 A conventional authoring range is 0..100 with DRY/WET endpoint labels, but effect-specific UI wording may vary.
 
-## 14. Oversampling
+## Auto Gain, Delta, and Safety Limiter
+
+Auto Gain is an optional plugin-defined toggle placed by the standard shell. Current reference plugins implement its compensation in developer-owned `PluginDSP.h`; it is not a universal generator formula.
+
+Delta Monitor is a role-bound toggle. While active, the generator outputs aligned processed minus aligned dry and ignores Wet/Dry amount. It is a monitoring mode, not another effect algorithm.
+
+Safety Limiter is an optional role-bound toggle, OFF by default, paired with a CEILING slider (`-6.0 .. 0.0 dB`, default `-0.5 dB`, step `0.1 dB`). Release is internal at 100 ms. It protects final sample peaks after Output Gain and before Output Meter; it is not True Peak limiting.
+
+## 15. Oversampling
 
 Current semantic values are:
 
@@ -373,7 +399,7 @@ Components have canonical logical footprints. Important preferred examples are:
 | Header | 24x3 |
 | Scope | 18x10 |
 
-Logical units are not pixels. In topological mode, the normalizer selects the current preferred/standard profile and derives spans from `ui-metrics.scm`; manually authored legacy `row-span`/`col-span` do not override that solved metric.
+Logical units are not pixels. In physical mode, the normalizer selects the requested/default profile and local scales; PhysicalLayout resolves rectangles from screen dimensions, base unit, UI scale/size, metrics, topology, and shell policy. DiscreteGridLayout v2 converts unique physical boundaries into variable JUCE Grid tracks. Legacy spans do not override that result.
 
 Authors should reason about relationship, hierarchy, and available logical capacity rather than micromanaging final pixel coordinates. Compact/extended profiles exist in the metric registry, but the current high-level normalizer chooses the preferred profile; there is no general per-instance profile keyword in the component DSL.
 
@@ -424,7 +450,7 @@ Use real Release 1.0 declarations:
 
 Use `#:gap` for intra-group spacing and `#:cross-align` for the other axis. Exact `next-*` relations mean exact adjacency; flexible `right-of`/`below` relations mean ordered non-overlap.
 
-Groups are flat and cannot contain other groups. Areas are anchors/bounds, not exclusive containers; independently placed groups can overlap unless explicit relationships prevent it. Always generate reference layouts with `#:layout-mode 'topological`.
+Groups are flat and cannot contain other groups. Areas are anchors/bounds, not exclusive containers; independently placed groups can overlap unless explicit relationships prevent it. Always generate current reference layouts with `#:layout-mode 'physical`.
 
 ## 23. Complete standard interface
 
@@ -548,7 +574,7 @@ The following source-valid interface uses all standard infrastructure. The topol
 (MakeNewProject
   "standard-effect"
   StandardEffect-interface
-  #:layout-mode 'topological
+  #:layout-mode 'physical
   #:topology-declarations standard-effect-topology)
 ```
 
@@ -687,7 +713,7 @@ Here is the complete compositional result, reusing the source-valid standard def
 (MakeNewProject
   "requested-reverb"
   RequestedReverb-interface
-  #:layout-mode 'topological
+  #:layout-mode 'physical
   #:topology-declarations requested-reverb-topology)
 ```
 
@@ -765,7 +791,7 @@ Selectors may be UI-only or fully APVTS-bound; bound defaults are one-based.
 Respect uniqueness of meter, gain, bypass, wet/dry, oversampling, and scope roles.
 Use scope tap-points only as (pre-dsp), (post-dsp), or
 (pre-dsp post-dsp). PRE/POST share one scale; Output Gain does not affect them.
-Generate reference layouts explicitly with layout-mode topological.
+Generate current reference layouts explicitly with layout-mode physical.
 Keep groups flat. Areas are anchors/bounds, not exclusive containers.
 Do not claim BPM synchronization is automatic; implement it in PluginDSP.
 Put effect-specific algorithms and parameter interpretation in PluginDSP.
@@ -798,7 +824,11 @@ implemented in PluginDSP, and validate the topology before generation.
 - `fft-size` does not share the current uniqueness enforcement of other global roles.
 - Custom DSP parameter meaning remains developer-owned.
 - There is no arbitrary audio-routing graph DSL.
+- Official Release 1.0 channel support is mono/stereo; 5.1, 7.1, and immersive bus topology are roadmap items.
+- Generic LFO/modulation routing is roadmap work, not a current capability.
 - Host transport fields can be absent depending on the host.
 - Linux Standalone/VST3 is the currently verified Release build platform.
 
 These are honest boundaries, not reasons to invent undocumented syntax. Design within them or make a separate, explicit generator architecture proposal.
+
+Roadmap items are architectural directions and experimental plugin concepts, not Release 1.0 capabilities. See `../NEXT.md`.

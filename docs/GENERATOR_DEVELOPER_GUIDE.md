@@ -15,7 +15,7 @@ The repository has four distinct ownership layers.
 | Generator | `generator.scm`, `generator-app/*.scm` | DSL, validation, registered models, layout, C++ emission, project orchestration |
 | Generic JUCE template | `YATemplate/JX11.jucer`, `YATemplate/Source/*` | Stable JUCE project skeleton and generic runtime/rendering infrastructure |
 | DSP developer | `YATemplate/Source/PluginDSP.h` | Effect-specific `RealPlugin` and `FFTProcessor` implementation |
-| Verification output | generated projects such as `pppbuttavia` | Inspectable and buildable consequences of generator/template source |
+| Verification output | frozen `YAEnhancerR1`, post-freeze `YASaturatorR1`, and historical examples | Inspectable/buildable consequences of generator/template source |
 
 `tests/*.scm` are the executable contract. `docs/*.md` describes that contract but cannot override source and tests.
 
@@ -78,7 +78,8 @@ MakeNewProject
   -> register immutable alist model
   -> prepare layout
        legacy: authored row/col/span
-       topological: normalize -> solve -> rational refinement
+       topological: normalize -> logical solve -> rational refinement
+       physical: normalize -> PhysicalLayout -> DiscreteGridLayout v2
   -> compose GUI/APVTS/DSP/resource buffers
   -> replace marked YATemplate regions
   -> ResaveProjucerProject
@@ -93,7 +94,7 @@ There is no persistent semantic-IR class hierarchy after registration. The regis
 
 ### `MakeNewProject`
 
-`(MakeNewProject new-name interface-definitions #:layout-mode mode #:topology-declarations declarations)` is the project-level entry point in `generator.scm`. `mode` defaults to `legacy`; Release/reference topological projects must pass `'topological` explicitly.
+`(MakeNewProject new-name interface-definitions #:layout-mode mode #:topology-declarations declarations)` is the project-level entry point in `generator.scm`. `mode` defaults to `legacy`; current Release/reference projects pass `'physical` explicitly. The older `'topological` logical-grid path remains supported.
 
 For a new destination it:
 
@@ -108,7 +109,7 @@ For an existing directory it first synchronizes the two allow-listed Kinetic fil
 
 ### `GenerateC++`
 
-`GenerateC++` resets generation buffers and registration state, calls the interface definition, materializes image sets, invokes all generators, replaces marked regions, selects legacy or topological grid emission, and calls `ResaveProjucerProject`.
+`GenerateC++` resets generation buffers and registration state, calls the interface definition, materializes image sets, invokes all generators, replaces marked regions, selects legacy, topological, or physical grid emission, and calls `ResaveProjucerProject`.
 
 Legacy mode also calls `run-generation-topological-shadow` as a diagnostic comparison. Its result does not feed the legacy emitter. Topological mode resolves and refines topology at `generate-selected-grid-code`.
 
@@ -153,7 +154,8 @@ The current uniqueness-enforced roles are:
 
 ```scheme
 input-gain output-gain wet-dry bypass dsp-bypass oversampling
-input-meter output-meter scope
+input-meter output-meter scope delta-monitor safety-limiter
+safety-limiter-ceiling
 ```
 
 `fft-size` is semantically consumed by DSP generation but is not in `*unique-component-roles*`; this is a documented Release 1.0 nuance, not permission to assume duplicates are supported correctly.
@@ -261,6 +263,12 @@ ComboBox item IDs and DSL `default-index` are one-based; `AudioParameterChoice` 
 
 Roles consume these generic cached values. Do not recreate a float/bool/choice parameter path inside `dsp-generation.scm` merely because a role uses it.
 
+### Standard shell/config contract
+
+`generator-app/standard-plugin-shell.scm` separates per-plugin choice from shared integration. Each component entry carries `enabled`, `display-name`, `tooltip`, `profile`, `width-scale`, and `height-scale`. Config decides what exists and how it appears; the shell decides semantic placement and integration. Display text never rewrites `id`, `role`, `parameter-id`, or `processor-reference`.
+
+The contract is uniform but TYPE support is real, not inferred: meter/scope lack title and tooltip properties, and selectors have no title. Optional plugin-defined IDs currently placed by the shell are Auto Gain, Delta Monitor, Safety Limiter, and CEILING. Delta and limiter roles have generator DSP consequences; Auto Gain compensation remains reference-plugin developer DSP.
+
 ## 12. DSP generation
 
 `generator-app/dsp-generation.scm` composes generated processor, editor-observer, MyPlugin, FFT, oversampling, wet/dry, and latency fragments.
@@ -279,6 +287,7 @@ generate-process-dry-latency-code
 generate-process-wetdry-postfix
 generate-process-scope-tap post-dsp
 generate-process-output-gain
+generate-process-safety-limiter
 generate-process-output-meter
 ```
 
@@ -287,8 +296,8 @@ This yields the Release 1.0 contract:
 ```text
 INPUT METER -> HARD BYPASS -> INPUT GAIN -> PRE SCOPE -> DRY CAPTURE
 -> FFT at host rate -> RealPlugin at selected 1x/2x/4x/8x
--> fixed-latency padding -> dry alignment -> WET/DRY
--> POST SCOPE -> OUTPUT GAIN -> OUTPUT METER
+-> fixed-latency padding -> dry alignment -> WET/DRY or DELTA
+-> POST SCOPE -> OUTPUT GAIN -> SAFETY LIMITER -> OUTPUT METER
 ```
 
 `generate-process-dsp` conditionally wraps the FFT/RealPlugin body in DSP bypass. `generate-process-dsp-body` emits FFT first and oversampling second. Without an oversampling role it calls 1x `processAudio`; with one, the cached integer selects the corresponding prepared instance and JUCE oversampler.
@@ -334,12 +343,16 @@ Generated runtime state is separate from graphical objects:
 | Oversampling | JUCE 2x/4x/8x `Oversampling<float>` objects | oversampling role |
 | FFT | `GeneratedStft<N>` for six sizes and six developer `FFTProcessor` instances | `fft-size` role |
 | Wet/dry | captured `dryBuffer` and mix path | wet-dry role |
+| Delta Monitor | dry reference plus aligned wet-minus-dry selection | delta-monitor role |
+| Safety Limiter | host-rate JUCE Limiter, fixed 100 ms release | limiter and ceiling roles together |
 | Fixed latency | delay buffers, indices, maximum/actual counters | all plugins; storage only if maximum > 0 |
 | Host transport | processor/template fields populated from playhead state | template-owned, not a formal DSL resource class |
 
 Meters publish from the audio thread with relaxed atomic stores; the editor consumes with `.exchange(0)` and applies its display ballistic. Scope publishes fixed-size snapshots through lock-free atomics and an index; the editor copies them on its timer. Neither path calls GUI objects from `processBlock`.
 
 Generated state is appropriate when its cardinality or wiring depends on registered semantics/properties. Stable universal infrastructure can belong in YATemplate. In either case, allocate in prepare/construction, reset explicitly, and keep process access bounded and non-blocking.
+
+Safety Limiter is OFF by default and sits after Output Gain, before Output Meter. CEILING is `-6.0 .. 0.0 dB`, default `-0.5 dB`, step `0.1 dB`. Generated pre/post scaling compensates JUCE Limiter's internal threshold/makeup convention so final sample peak follows CEILING; this is not True Peak limiting. Hard Bypass returns before it; DSP Bypass does not.
 
 ## 15. Topological normalization
 
@@ -365,6 +378,7 @@ Generated state is appropriate when its cardinality or wiring depends on registe
 - positional constructors describe exact adjacency or partial order;
 - alignment constructors create hard multi-node alignments;
 - `lt:group` describes flat ordered membership, layout axis, gap, optional cohesion/cross alignment/area;
+- `lt:stack` describes a rigid named layout entity, supports nested inline stacks, and is used by the standard shell/current physical path;
 - `lt:place-in-area` anchors a node to a recursive-third area;
 - `lt:solve` validates and resolves nodes and group bboxes.
 
@@ -374,7 +388,7 @@ The solver translates axis-specific relations into difference edges conceptually
 
 Cohesive groups add finite soft wishes. `cohesion-weight` maps weak/medium/strong to 1/2/3; `optimize-soft-axis` enumerates hard-valid configurations and chooses by current soft cost. Soft wishes never override hard constraints.
 
-Groups are flat because `validate-groups!` requires every member to be a node ID. Areas recursively select thirds and constrain placement; they do not reserve occupancy or provide inter-group collision avoidance.
+Groups are flat because `validate-groups!` requires every group member to be a node ID. Stacks are distinct hierarchical geometric entities and may contain node or stack IDs (including normalized nested inline stacks). Areas recursively select thirds and constrain placement; they do not reserve occupancy or provide general packing.
 
 When adding solver behavior, preserve exact arithmetic, independent axes, complete reference validation, hard contradiction detection, deterministic selection, and the separation between normalized DSL and low-level IR.
 
@@ -411,9 +425,19 @@ Do not duplicate historical dimensions in fixtures or emitters.
 
 `generator-app/layout.scm` owns `<screen>`, `<grid>`, registration, screen-size C++, and JUCE Grid data emission.
 
-`generate-grid-code` consumes an integer grid model with `rows`, `cols`, and component layout alists. It emits a component pointer map and JSON containing `grid` and `components`; stable template code interprets that data with the existing JUCE Grid path.
+The current reference path is:
 
-Legacy mode uses `generate-layout-data-components`, preserving authored row/col/span. Topological mode passes refined `grid-model` and `layout-components` through `generate-selected-grid-code`. It reuses the same emitter; no topological solver is generated in C++.
+```text
+DSL components -> LogicalTopology -> topological normalization
+-> PhysicalLayout -> DiscreteGridLayout v2
+-> generation adapter -> JUCE Grid runtime
+```
+
+PhysicalLayout consumes screen width/ratio, base unit, `ui-scale`/`ui-size`, UI metric contracts, normalized stacks/relations/areas, and standard-shell domain policy. It produces exact physical component rectangles. DiscreteGridLayout v2 collects sorted unique rectangle/screen boundaries, derives variable tracks, maps rectangles to one-based rows/columns/spans, and proves exact reconstruction. The adapter supplies those tracks and components to `generate-grid-code`.
+
+`generate-grid-code` emits a component pointer map and JSON containing grid tracks and components; stable template code interprets it with JUCE Grid. No solver runs in C++.
+
+Legacy mode preserves authored row/col/span. Older topological mode passes rationally refined logical geometry. Physical mode passes DiscreteGridLayout v2 through `adapt-discrete-grid-layout`. All converge on the same emitter.
 
 ## 20. YATemplate integration
 
@@ -464,6 +488,8 @@ becomes the same literal marker lines enclosing the new `*PROCESS*` buffer. `rep
 The rename traversal changes occurrences of `YATemplate` to the destination name except inside `Source/PluginDSP.h`. Existing regeneration preserves that developer file and synchronizes only Kinetic support files before marker replacement.
 
 Deleting and recreating a destination can allocate a new identity. Identity is directory-persistence based, not name-derived. Concurrent new-project generation also shares the repository counter and mutable/global workflow; Release 1.0 does not claim transactional multi-process generation.
+
+After initial creation, treat `JX11.jucer` as immutable. `ResaveProjucerProject` may change its hash during generation/testing, but automatic resave churn is not an intentional plugin change and should not normally be included. Do not edit JUCER templates to solve a plugin-local requirement.
 
 ## 23. Binary resource handling
 
@@ -701,20 +727,15 @@ Recommended Release 1.0 procedure:
 
 1. inspect `git status --short` and preserve unrelated/user changes;
 2. run the core pure tests above;
-3. regenerate reference pppbuttavia explicitly in topological mode;
+3. regenerate frozen YAEnhancerR1 only when a demonstrated reference bug or explicit release verification requires it, using its declared physical topology;
 4. confirm Kinetic allow-list synchronization and inspect generated consequences;
 5. clean-build Linux Release;
 6. verify both Standalone and VST3 outputs;
 7. inspect final diff/status, then commit/tag through the normal human release process.
 
-Canonical regeneration command from this repository:
+The plugin definition supplies the canonical interface and topology. Do not substitute historical pppbuttavia as the primary Release 1.0 reference. YASaturatorR1 is a post-freeze reuse proof and does not replace YAEnhancerR1.
 
-```sh
-GUILE_AUTO_COMPILE=0 guile -L . -l generator.scm -c \
-  '(MakeNewProject "pppbuttavia" NewGeneric-interface #:layout-mode (quote topological) #:topology-declarations pppbuttavia-topology)'
-```
-
-This operation can invoke Zenity; use the repository-requested audible warning first. The currently verified build path is `pppbuttavia/Builds/LinuxMakefile` with `make clean CONFIG=Release` followed by `make -j2 CONFIG=Release`. Release 1.0 evidence does not establish equivalent builds on every platform.
+Generation can invoke Zenity; follow the repository warning procedure. Projucer resave may touch `JX11.jucer`; restore/omit only that incidental test churn through an explicitly safe workflow, never with destructive broad Git operations. Release 1.0 evidence does not establish equivalent builds on every platform.
 
 ## 38. Common architectural mistakes
 
@@ -737,7 +758,7 @@ This operation can invoke Zenity; use the repository-requested audible warning f
 | Forget support synchronization | Regenerate existing destination through `MakeNewProject` |
 | Omit slider/toggle binding fields | Supply all three nonempty binding strings; validation requires them |
 | Assume `fft-size` uniqueness is enforced | Respect the documented nuance or explicitly add/test enforcement |
-| Generate reference UI in legacy mode | Pass `#:layout-mode 'topological` explicitly |
+| Generate current reference UI in legacy/older topological mode | Pass `#:layout-mode 'physical` explicitly |
 | Quote `cpp-utf8-string` output | Insert its complete `juce::String::fromUTF8(...)` expression |
 | Gate developer latency on FFT/OS | Keep unconditional fixed-latency discovery and positive-maximum guards |
 
@@ -760,9 +781,12 @@ Before changing this repository, follow these rules:
 13. Put generic visual rendering in authoritative YATemplate Kinetic files.
 14. Treat `PluginDSP.h` as developer-owned.
 15. Add focused validation/generation/order tests at the changed boundary.
-16. Regenerate reference projects with explicit topological mode.
+16. Regenerate current reference projects with explicit physical mode.
 17. Inspect and compile generated output as evidence.
 18. Do not silently introduce semantic roles, routing, latency, or bypass behavior.
+19. Keep YAEnhancerR1 frozen except for demonstrated bugs; treat YASaturatorR1 as reuse evidence.
+20. Prefer `getNumChannels()`/AudioBlock iteration for naturally channel-independent DSP; official support remains mono/stereo.
+21. Treat an existing `JX11.jucer` as immutable and do not include incidental Projucer hash churn.
 
 ## 40. Release 1.0 limitations
 

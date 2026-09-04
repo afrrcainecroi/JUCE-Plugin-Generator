@@ -8,13 +8,13 @@ Examples assume `generator.scm` has loaded the public generator facade and its D
 
 ## 2. Minimal generation example
 
-Reference/topological generation must request topological mode explicitly:
+Current Release 1.0 reference plugins request physical mode explicitly:
 
 ```scheme
 (MakeNewProject
   "plugin-name"
   InterfaceFunction
-  #:layout-mode 'topological
+  #:layout-mode 'physical
   #:topology-declarations topology-definition)
 ```
 
@@ -57,7 +57,7 @@ A minimal interface and topology:
 
 `dst-folder` is supplied by the generator and may be unused. Logical IDs in topology are symbols corresponding losslessly to component `#:id` strings.
 
-Legacy mode remains supported by `#:layout-mode 'legacy` and is the function default. It emits authored legacy row/column fields; it must not be used as proof that a topological interface solves correctly.
+`#:layout-mode 'physical` runs LogicalTopology through PhysicalLayout and DiscreteGridLayout v2. Earlier `topological` logical-grid emission and `legacy` authored-grid emission remain compatibility modes; `legacy` is still the function default. Neither is proof that the current physical reference path solves correctly.
 
 ## 3. Common component model
 
@@ -67,6 +67,9 @@ Every concrete UI component inherits `<component>`:
 |---|---|---:|---|
 | `#:id` | logical ID, normally nonempty string or symbol | `#f` | Required stable identity; duplicate IDs are rejected. It is normalized to a safe unique C++ identifier. |
 | `#:role` | symbol or `#f` | `#f` | Optional semantic generator behavior. Only documented roles have built-in consequences. |
+| `#:profile` | metric profile symbol or `#f` | `#f` | Optional UI-metric profile override used by normalization/layout. |
+| `#:width-scale` | positive exact number | `1` | Local width scaling for logical/physical sizing. |
+| `#:height-scale` | positive exact number | `1` | Local height scaling for logical/physical sizing. |
 | `#:row` | integer or `#f` | `#f` | Legacy row; retained in the model. When present during topology normalization it is a hard integer anchor. |
 | `#:col` | integer or `#f` | `#f` | Legacy column; retained and treated as a hard topology anchor when present. |
 | `#:row-span` | number | `1` | Legacy span retained in the model. Topological mode replaces it with the canonical metric-derived span. |
@@ -1224,7 +1227,29 @@ Only requested lock-free streams are emitted. PRE is after input gain/before DSP
 
 Using `'(post-dsp pre-dsp)`, duplicates or empty taps; creating separate pre/post scope TYPEs; expecting output gain to change the traces.
 
-## 7. Semantic roles
+## 7. Standard plugin shell and per-plugin config
+
+`standard-plugin-interface` creates the common shell and `standard-plugin-topology` assigns semantic placement. A plugin configures each standard element with the complete contract:
+
+```scheme
+(component-id
+ (enabled . #t)
+ (display-name . "...")
+ (tooltip . "...")
+ (profile . #f)
+ (width-scale . 1)
+ (height-scale . 1))
+```
+
+Plugin config decides **what exists and how it appears**. The standard shell decides **where it belongs semantically and how it is integrated**. `display-name` is not logical identity and cannot change `id`, `role`, `parameter-id`, or `processor-reference`.
+
+The common contract does not invent properties unsupported by a TYPE. Labels, sliders, and buttons/toggles support tooltip emission; selectors support tooltip and enablement but have no title property; meter and scope currently have no tooltip or display-title slot. `profile`, `width-scale`, and `height-scale` are common layout fields. A config may therefore retain descriptive metadata that a meter/scope does not currently render.
+
+The shell creates its built-in controls. Optional IDs `auto-gain`, `delta-monitor`, `safety-limiter`, and `safety-limiter-ceiling` are plugin-defined controls selected and placed through the same config. Delta and Safety Limiter trigger generated processing; current Auto Gain compensation is implemented in the reference plugins' developer-owned `PluginDSP.h`.
+
+Safety Limiter requires both limiter roles. CEILING is `-6.0 .. 0.0 dB`, default `-0.5 dB`, interval `0.1 dB`; the toggle defaults OFF. Its 100 ms release is internal and is not a DSL control.
+
+## 8. Semantic roles
 
 | Role | Intended family | Uniqueness | Generated consequence |
 |---|---|---|---|
@@ -1237,6 +1262,9 @@ Using `'(post-dsp pre-dsp)`, duplicates or empty taps; creating separate pre/pos
 | `input-meter` | meter | enforced | Pre-input-gain host-input observation. |
 | `output-meter` | meter | enforced | Final host-output observation, including hard bypass. |
 | `scope` | scope | enforced | Emits selected PRE/POST observation resources/wiring. |
+| `delta-monitor` | bound toggle/switch | enforced | Emits aligned wet minus aligned dry instead of normal Wet/Dry. |
+| `safety-limiter` | bound toggle/switch | enforced | Enables optional final sample-peak protection. |
+| `safety-limiter-ceiling` | bound slider | enforced | Supplies the limiter's final sample-peak ceiling. |
 | `fft-size` | stepped bound slider in reference UI | **not in enforced unique-role list** | Presence emits FFT/STFT infrastructure and size selection. Treat as single-instance convention. |
 
 Arbitrary custom role symbols may be stored but do not trigger generator behavior. Custom effect parameters normally use no role and are read by developer DSP.
@@ -1740,7 +1768,7 @@ Copy this operational checklist into generation prompts:
 3. Do not invent convenience keywords such as `#:step`, `#:min-db`, or `#:tap`.
 4. Supply complete binding ID/name/reference for every slider and toggle/switch.
 5. Preserve one instance of each uniqueness-enforced semantic role; also use only one `fft-size` by Release 1.0 convention.
-6. Use `#:layout-mode 'topological` explicitly for reference/topological projects.
+6. Use `#:layout-mode 'physical` explicitly for current reference projects; use `'topological` only when intentionally testing the earlier logical-grid path.
 7. Use flat groups only; never place a group ID inside another group.
 8. Treat areas as anchors/bounds, never exclusive regions; add explicit relations when non-overlap matters.
 9. Use scope taps exactly as `'(pre-dsp)`, `'(post-dsp)`, or `'(pre-dsp post-dsp)`.
