@@ -262,7 +262,8 @@
             // Oversampling OFF / 1x
             myplugin->processAudio(
                 buffer,
-                1);
+                1,
+                hostTransportInfo);
             break;
         }
 
@@ -276,7 +277,8 @@
 
             myplugin->processAudio(
                 oversampledBlock,
-                2);
+                2,
+                hostTransportInfo);
 
             oversampling2x->processSamplesDown(block);
             break;
@@ -292,7 +294,8 @@
 
             myplugin->processAudio(
                 oversampledBlock,
-                4);
+                4,
+                hostTransportInfo);
 
             oversampling4x->processSamplesDown(block);
             break;
@@ -308,7 +311,8 @@
 
             myplugin->processAudio(
                 oversampledBlock,
-                8);
+                8,
+                hostTransportInfo);
 
             oversampling8x->processSamplesDown(block);
             break;
@@ -317,7 +321,8 @@
         default:
             myplugin->processAudio(
                 buffer,
-                1);
+                1,
+                hostTransportInfo);
             break;
     }
 
@@ -327,7 +332,8 @@
          "
     myplugin->processAudio(
         buffer,
-        1);
+        1,
+        hostTransportInfo);
 
 "))))
 
@@ -1580,7 +1586,8 @@ private:
 
     realPlugin1x->processAudio(
         block,
-        context);
+        context,
+        transport);
 ")
 
 (define-public (generate-myplugin-process-audio-block-code)
@@ -1599,25 +1606,29 @@ private:
         case 2:
             realPlugin2x->processAudio(
                 buffer,
-                context);
+                context,
+                transport);
             break;
 
         case 4:
             realPlugin4x->processAudio(
                 buffer,
-                context);
+                context,
+                transport);
             break;
 
         case 8:
             realPlugin8x->processAudio(
                 buffer,
-                context);
+                context,
+                transport);
             break;
 
         default:
             realPlugin1x->processAudio(
                 buffer,
-                context);
+                context,
+                transport);
             break;
     }
 ")
